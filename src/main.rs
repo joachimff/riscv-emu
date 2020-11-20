@@ -8,8 +8,8 @@ pub struct RType{
     opcode: u8
 }
 
-impl RType{
-    pub fn parse(instruction:u32) -> RType{
+impl From<u32> for RType{
+    fn from(instruction:u32) -> Self{
         RType{
             funct7: (instruction >> 25) as u8,
             rs2:    ((instruction >> 20) & 0b11111) as usize,
@@ -49,8 +49,8 @@ pub struct UType{
     opcode: u8
 }
 
-impl UType{
-    pub fn parse(instruction:u32) -> UType{
+impl From<u32> for UType{
+    fn from(instruction:u32) -> Self{
         UType{
             imm: ((instruction >> 12) & 0b1111_1111_1111_1111_1111) as u32,
             rd:     ((instruction >> 7) & 0b11111) as usize,
@@ -66,8 +66,8 @@ pub struct JType{
     opcode: u8
 }
 
-impl JType{
-    pub fn parse(instruction:u32) -> JType{
+impl From<u32> for JType{
+    fn from(instruction:u32) -> Self{
         JType{
             imm: (((instruction >> 21) & 0b1_1111_1111) << 1 |
                 ((instruction >> 20) & 0b1) << 11 |
@@ -191,19 +191,19 @@ impl CPU{
         match opcode{
             //LUI
             0b011_0111 => {
-                let instr = UType::parse(instr);
+                let instr = UType::from(instr);
                 self.registers.common[instr.rd] = (instr.imm as i32) << 12; 
             },
             //AUIPC TODO: double check
             0b001_0111 => {
-                let instr = UType::parse(instr);
+                let instr = UType::from(instr);
 
                 let addr = (instr.imm as i32) << 12;
                 self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
             },
             //JAL
             0b110_1111 => {
-                let instr = JType::parse(instr);
+                let instr = JType::from(instr);
 
                 self.registers.common[2] = self.registers.pc.wrapping_add(4);
                 self.registers.pc = self.registers.common[instr.rd].wrapping_add(instr.imm);
@@ -380,7 +380,7 @@ impl CPU{
                 }
             },
             0b011_0011 => {
-                let instr = RType::parse(instr);
+                let instr = RType::from(instr);
 
                 match instr.funct3 {
                     0b000 =>{
