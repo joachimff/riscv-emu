@@ -184,188 +184,42 @@ impl CPU{
         }
     }
 
-    //Execute one instruction RType
-    pub fn exec_itype(&mut self, instr: u32){
-        let instr = IType::from(instr);
+    //Execute one instruction
+    pub fn exec_instruction(&mut self, instr: u32){
+        let opcode = instr & 0b111_1111;
 
-        println!("New IType instruction: {:x?}", instr);
-        match instr.opcode{
-            0b001_0011 => {
-                match instr.funct3{
-                    //ADDI
-                    0b000 => {
-                        //ADDI x0, x0, 0 <=> NOP
-
-                        self.registers.common[instr.rd] = self.registers.common[instr.rs1] + instr.imm;
-                    },
-                    //SLTI
-                    0b010 => {
-                        if self.registers.common[instr.rs1] < instr.imm{
-                            self.registers.common[instr.rd] = 1;
-                        }
-                        else{
-                            self.registers.common[instr.rd] = 0;
-                        }
-                    },
-                    //SLTIU
-                    0b011 => {
-                        //Special case
-                        if instr.imm == 0{
-                            self.registers.common[instr.rd] = 
-                                if self.registers.common[instr.rs1] == 0 {1} else {0};
-                        }
-
-                        else{
-                            if (self.registers.common[instr.rs1] as u32) < (instr.imm as u32){
-                                self.registers.common[instr.rd] = 1;
-                            }
-                            else{
-                                self.registers.common[instr.rd] = 0;
-                            }
-                        }
-                    },
-                    //XORI
-                    0b100 => {
-                        self.registers.common[instr.rd] = self.registers.common[instr.rs1] ^ instr.imm; 
-                    },
-                    //ORI
-                    0b110 => {
-                        self.registers.common[instr.rd] = self.registers.common[instr.rs1] | instr.imm; 
-                    },
-                    //ANDI
-                    0b111 => {
-                        self.registers.common[instr.rd] = self.registers.common[instr.rs1] & instr.imm; 
-                    },
-                    _ => {
-                        panic!("Invalid funct3({:#b}) value for opcode {:#b}", instr.funct3, instr.opcode)
-                    }
-                }
+        match opcode{
+            //LUI
+            0b011_0111 => {
+                let instr = UType::parse(instr);
+                self.registers.common[instr.rd] = (instr.imm as i32) << 12; 
             },
-            0b1100111 => {
-                match instr.funct3 {
-                    //JALR
-                    0b000 => {
-                        self.registers.common[2] = self.registers.pc.wrapping_add(4);
-                        self.registers.pc = (instr.rs1 as i32).wrapping_add(instr.imm);
-                    },
-                    _ => { panic!("Impossible"); }
-                }
-            }
-            _ => {
-                panic!("NYI OpCode: {:#b}", instr.opcode)
-            }
-        }
-    }
+            //AUIPC TODO: double check
+            0b001_0111 => {
+                let instr = UType::parse(instr);
 
-    pub fn exec_rtype(&mut self, instr: u32){
-        let instr = RType::parse(instr);
-
-        println!("New RType instruction: {:x?}", instr);
-        match instr.opcode{
-            0b011_0011 => {
-                match instr.funct7 {
-                    0b000_0000 => {
-                        match instr.funct3 {
-                            //ADD
-                            0b000 =>{
-                                self.registers.common[instr.rd] =
-                                    self.registers.common[instr.rs1] + self.registers.common[instr.rs2];
-                            },
-                            //SLL
-                            0b001 => {
-                                self.registers.common[instr.rd] =
-                                    self.registers.common[instr.rs1] << (instr.rs2 & 0b1_1111);
-                            },
-                            //SLT
-                            0b010 => {
-                                self.registers.common[instr.rd] = if instr.rs1 < instr.rs2 {1} else {0};
-                            },
-                            //SLTU
-                            0b011 => {
-                                //Special case
-                                if instr.rs1 == 0{
-                                    self.registers.common[instr.rd] =
-                                        if self.registers.common[instr.rs2] != 0 {1} else {0};
-                                }
-                                else {
-                                    self.registers.common[instr.rd] = 
-                                        if (instr.rs1 as u32) < (instr.rs2 as u32) {1} else {0};
-                                }
-                            },
-                            //XOR
-                            0b100 => {
-                                self.registers.common[instr.rd] = 
-                                    self.registers.common[instr.rs1] ^ self.registers.common[instr.rs2]; 
-                            },
-                            //SRL
-                            0b101 => {
-                                self.registers.common[instr.rd] =
-                                    ((self.registers.common[instr.rs1] as u32) >> (instr.rs2 & 0b1_1111)) as i32;
-                            }
-                            //OR
-                            0b110 => {
-                                self.registers.common[instr.rd] =
-                                    self.registers.common[instr.rs1] | self.registers.common[instr.rs2];
-                            }
-                            //AND
-                            0b111 => {
-                                self.registers.common[instr.rd] = 
-                                    self.registers.common[instr.rs1] & self.registers.common[instr.rs2];
-                            },
-                            _ => { panic!("Unreachable") }
-                        }
-                    },
-                    0b100_000 => {
-                        match instr.funct3 {
-                            //SUB
-                            0b000 => {
-                                self.registers.common[instr.rd] =
-                                    self.registers.common[instr.rs1] - self.registers.common[instr.rs2];
-                            },
-                            //SRA
-                            0b101 => {
-                                self.registers.common[instr.rd] =
-                                    self.registers.common[instr.rs1] >> (instr.rs2 & 0b1_1111);
-                            },
-                            _ => {
-                                panic!("Invalid funct3({:#b}) for opcode {:#b} and funct7 {:#b}", 
-                                    instr.funct3, instr.opcode, instr.funct7)
-                            }
-                        }
-                    },
-                    _ => {
-                        panic!("Invalid funct7({:#b}) for opcode {:#b}", instr.funct7, instr.opcode)            
-                    }
-                }
-            }
-            _ => {
-                panic!("Unknown opcode for RType: {:#b}", instr.opcode)
-            }
-        }
-    }
-
-    fn exec_jtype(&mut self, instr: u32){
-        println!("New JType instruction: {:x?}", instr);
-        
-        let instr = JType::parse(instr);
-        match instr.opcode{
+                let addr = (instr.imm as i32) << 12;
+                self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
+            },
             //JAL
             0b110_1111 => {
-                //Return address
+                let instr = JType::parse(instr);
+
                 self.registers.common[2] = self.registers.pc.wrapping_add(4);
                 self.registers.pc = self.registers.common[instr.rd].wrapping_add(instr.imm);
             },
-            _ => { panic!("PANIC") }
-        }
-    }
+            //JALR
+            0b110_0111 => {
+                let instr = IType::from(instr);
 
-    fn exec_btype(&mut self, instr: u32){
-        println!("New JType instruction: {:x?}", instr);
-
-        let instr = BType::from(instr);
-        match instr.opcode{
+                self.registers.common[2] = self.registers.pc.wrapping_add(4);
+                self.registers.pc = (instr.rs1 as i32).wrapping_add(instr.imm);
+            },
+            //Conditional Branches
             0b110_0011 => {
-                match instr.func3{
+                let instr = BType::from(instr);
+
+                match instr.func3 {
                     //BEQ
                     0b000 => {
                         if self.registers.common[instr.rs1] == self.registers.common[instr.rs2]{
@@ -402,107 +256,204 @@ impl CPU{
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
                         }
                     },
-                    _ => panic!("") 
+                    _ => {unreachable!()},
                 }
             },
-            _ => panic!("")
-        }
-    }
-
-    fn load_instruction(&mut self, instr: u32){
-        let instr = IType::from(instr);
-
-        match instr.opcode{
-            0b000_0000 => {
+            //LOAD 
+            0b000_0011 => {
+                let instr = IType::from(instr);
                 let addr = (instr.rs1 as i32).wrapping_add(instr.imm) as usize;
-                
-                match instr.funct3 {
+
+                match instr.funct3{
                     //LB
                     0b000 => {
                         let mut buf = [0u8; 1];
                         self.memory.read(addr, &mut buf);
-
+    
                         self.registers.common[instr.rd] = i8::from_le_bytes(buf) as i32;
                     },
                     //LH
                     0b001 => {
                         let mut buf = [0u8; 2];
                         self.memory.read(addr, &mut buf);
-
+    
                         self.registers.common[instr.rd] = i16::from_le_bytes(buf) as i32;
                     },
                     //LW
                     0b010 => {
                         let mut buf = [0u8; 4];
                         self.memory.read(addr, &mut buf);
-
+    
                         self.registers.common[instr.rd] = i32::from_le_bytes(buf);
                     },
                     //LBU
                     0b100 => {
                         let mut buf = [0u8; 1];
                         self.memory.read(addr, &mut buf);
-
+    
                         self.registers.common[instr.rd] = u8::from_le_bytes(buf) as i32;
                     },
                     //LHU
                     0b101 => {
                         let mut buf = [0u8; 2];
                         self.memory.read(addr, &mut buf);
-
+    
                         self.registers.common[instr.rd] = u16::from_le_bytes(buf) as i32;
                     },
-                    _ => { panic!(""); }
+                    _ => {unreachable!()}
                 }
             },
-            _ => { panic!("") }
-        }
-    }
-
-    fn store_instruction(&mut self, instr: u32){
-        let instr = SType::from(instr);
-
-        match instr.opcode{
+            //STORE
             0b010_0011 => {
+                let instr = SType::from(instr);
                 let addr = (instr.rs1 as i32).wrapping_add(instr.imm) as usize;
 
                 match instr.funct3 {
                     //SB
-                    0b000 => {
-                        self.memory.write(addr, &(self.registers.common[instr.rs2] as u8).to_le_bytes());
-                    },
+                    0b000 => { self.memory.write(addr, &(self.registers.common[instr.rs2] as u8).to_le_bytes()); },
                     //SH
-                    0b001 => {
-                        self.memory.write(addr, &(self.registers.common[instr.rs2] as u16).to_le_bytes());
-                    },
+                    0b001 => { self.memory.write(addr, &(self.registers.common[instr.rs2] as u16).to_le_bytes()); },
                     //SW
-                    0b010 => {
-                        self.memory.write(addr, &self.registers.common[instr.rs2].to_le_bytes());
-                    },
-                    _ => { panic!(""); }
+                    0b010 => { self.memory.write(addr, &self.registers.common[instr.rs2].to_le_bytes()); },
+                    _ => { unreachable!(); }
                 }
             },
-            _ => { panic!("") }
+            //Integer register-immediate instructions
+            0b001_0011 => {
+                let instr = IType::from(instr);
+                
+                match instr.funct3{
+                    //ADDI
+                    0b000 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] + instr.imm; },
+                    //SLTI
+                    0b010 => {
+                        if self.registers.common[instr.rs1] < instr.imm{
+                            self.registers.common[instr.rd] = 1;
+                        }
+                        else{
+                            self.registers.common[instr.rd] = 0;
+                        }
+                    },
+                    //SLTIU
+                    0b011 => {
+                        //Special case
+                        if instr.imm == 0{
+                            self.registers.common[instr.rd] = 
+                                if self.registers.common[instr.rs1] == 0 {1} else {0};
+                        }
+
+                        else{
+                            if (self.registers.common[instr.rs1] as u32) < (instr.imm as u32){
+                                self.registers.common[instr.rd] = 1;
+                            }
+                            else{
+                                self.registers.common[instr.rd] = 0;
+                            }
+                        }
+                    },
+                    //XORI
+                    0b100 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] ^ instr.imm; },
+                    //ORI
+                    0b110 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] | instr.imm; },
+                    //ANDI
+                    0b111 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] & instr.imm; },
+                    
+                    //These three instructions have a special encoding
+                    //SLLI
+                    0b001 => {
+                        let shamt = instr.imm & 0b1_1111;
+                        self.registers.common[instr.rd] = self.registers.common[instr.rs1] << shamt; 
+                    }
+                    0b101 => {
+                        let shamt = instr.imm & 0b1_1111;
+                        
+                        //SRAI
+                        if ((instr.imm >> 11) & 0b1) == 1{
+                            self.registers.common[instr.rd] = (self.registers.common[instr.rs1] as i32) >> shamt;
+                        }
+                        //SRLI
+                        else{
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as u32) >> shamt as u32) as i32; 
+                        }
+                    },
+                    _ => { unreachable!() }
+                }
+            },
+            0b011_0011 => {
+                let instr = RType::parse(instr);
+
+                match instr.funct3 {
+                    0b000 =>{
+                        //ADD
+                        if instr.funct7 == 0{
+                            self.registers.common[instr.rd] =
+                                self.registers.common[instr.rs1] + self.registers.common[instr.rs2];
+                        }
+                        //SUB
+                        else{
+                            self.registers.common[instr.rd] =
+                                self.registers.common[instr.rs1] - self.registers.common[instr.rs2];
+                        }
+                    },
+                    //SLL
+                    0b001 => {
+                        self.registers.common[instr.rd] =
+                            self.registers.common[instr.rs1] << (instr.rs2 & 0b1_1111);
+                    },
+                    //SLT
+                    0b010 => {
+                        self.registers.common[instr.rd] = if instr.rs1 < instr.rs2 {1} else {0};
+                    },
+                    //SLTU
+                    0b011 => {
+                        //Special case
+                        if instr.rs1 == 0{
+                            self.registers.common[instr.rd] =
+                                if self.registers.common[instr.rs2] != 0 {1} else {0};
+                        }
+                        else {
+                            self.registers.common[instr.rd] = 
+                                if (instr.rs1 as u32) < (instr.rs2 as u32) {1} else {0};
+                        }
+                    },
+                    //XOR
+                    0b100 => {
+                        self.registers.common[instr.rd] = 
+                            self.registers.common[instr.rs1] ^ self.registers.common[instr.rs2]; 
+                    },
+                    0b101 => {
+                        //SRL
+                        if instr.funct7 == 0{
+                            self.registers.common[instr.rd] =
+                                ((self.registers.common[instr.rs1] as u32) >> (instr.rs2 & 0b1_1111)) as i32;
+                        }
+                        //SRA
+                        else {
+                            self.registers.common[instr.rd] =
+                                self.registers.common[instr.rs1] >> (instr.rs2 & 0b1_1111);
+                        }
+                    }
+                    //OR
+                    0b110 => {
+                        self.registers.common[instr.rd] =
+                            self.registers.common[instr.rs1] | self.registers.common[instr.rs2];
+                    }
+                    //AND
+                    0b111 => {
+                        self.registers.common[instr.rd] = 
+                            self.registers.common[instr.rs1] & self.registers.common[instr.rs2];
+                    },
+                    _ => { unreachable!() }
+                }
+            },
+            //FENCE
+            0b000_1111 => { panic!("FENCE NYI"); },
+            //ECALL EBREAK
+            0b111_0011 => { panic!("ECALL/EBREAK NYI"); },
+            
+            _ => unreachable!()
         }
     }
-
-    //LUI
-    pub fn LUI(&mut self, instr: u32){
-        let instr = UType::parse(instr);
-
-        self.registers.common[instr.rd] = (instr.imm as i32) << 12;
-    }
-
-    pub fn AUIPC(&mut self, instr: u32){
-        let instr = UType::parse(instr);
-
-        let addr = (instr.imm as i32) << 12;
-        self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
-    }
-
-    //FENCE => unreachable, used for I/O dont care
-    //EBREAK
-    //ECALL
 }
 
 
@@ -512,6 +463,6 @@ fn main() {
     //ADDI
     let instr = 0b011011001110_01110_000_10010_0010011 as u32;
 
-    cpu.exec_itype(instr);
+    cpu.exec_instruction(instr);
     println!("After: {:x?}", cpu);
 }
