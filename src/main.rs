@@ -1,4 +1,5 @@
 use std::fs;
+use std::fmt;
 
 #[derive(Debug)]
 pub struct RType{
@@ -35,9 +36,9 @@ pub struct IType{
 impl From<u32> for IType {
     fn from(instruction: u32) -> Self {
         IType{
-            imm:    (instruction >> 20) as i32,
+            imm:    (instruction as i32) >> 20,
             rs1:    ((instruction >> 15)  & 0b11111) as usize,
-            funct3: ((instruction >> 12) & 0b111) as u8,
+            funct3: ((instruction >> 12)  & 0b111) as u8,
             rd:     ((instruction >> 7)   & 0b11111) as usize,
             opcode: (instruction          & 0b1111_111) as u8,
         }
@@ -119,9 +120,9 @@ pub struct SType{
 impl From<u32> for SType{
     fn from(instruction:u32) -> Self{
         SType{
-            imm: (((instruction >> 7) & 0b11111) << 1 |
+            imm: ((instruction >> 7) & 0b1_1111) as i32|
                 //Sign extended
-                (instruction >> 25) << 5) as i32,
+                (((instruction as i32) >> 25) << 5),
             rs1: ((instruction >> 15) & 0b11111) as usize,
             rs2: ((instruction >> 20) & 0b11111) as usize,
             funct3: ((instruction >> 12) & 0b111) as u8,
@@ -140,17 +141,21 @@ struct Registers{
 
 impl Registers {
     pub fn new() -> Registers {
+        let mut common = [0; 32];
+        common[2] = MEMORY_SIZE as i32;
+
         Registers{
-            common: [0; 32],
+            common: common,
             pc: 0
         }
     }
 }
 
+const MEMORY_SIZE: usize = 0x20;
+
 //Hold the memory
-#[derive(Debug)]
 struct Memory {
-    data: [u8; 2048]
+    data: [u8; MEMORY_SIZE]
 }
 
 //Manage memory
@@ -158,20 +163,39 @@ impl Memory{
     //Return a new memory with all null data
     pub fn new() -> Memory {
         Memory {
-            data: [0; 2048]
+            data: [0; MEMORY_SIZE]
         }
     }
 
     pub fn read(&self, at: usize, buf: &mut [u8]) {
-        buf.copy_from_slice(&self.data[at..buf.len()]);
+        buf.copy_from_slice(&self.data[at..at + buf.len()]);
     }
 
     pub fn write(&mut self, at: usize, buf: &[u8]){
-        self.data[at..buf.len()].copy_from_slice(buf);
+        self.data[at..at + buf.len()].copy_from_slice(buf);
     }
 }
 
-#[derive(Debug)]
+impl fmt::Debug for Memory{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "---------------------------------------------------Memory--------------------------------------------------");
+        
+        let mut i = 0;
+        while i < self.data.len(){
+            if (i % 0x10) == 0{
+                if i != 0 {writeln!(f);}
+                write!(f, "{:#08X}: ", i);
+            }
+            if (i % 2) == 0{
+                write!(f, " ");
+            }
+            write!(f, "{:02X}", self.data[i]);
+            i += 1;
+        }
+        writeln!(f)
+    }
+}
+
 struct CPU{
     memory: Memory,
     registers: Registers,
@@ -264,8 +288,9 @@ impl CPU{
             //LOAD 
             0b000_0011 => {
                 let instr = IType::from(instr);
-                let addr = (instr.rs1 as i32).wrapping_add(instr.imm) as usize;
+                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm) as usize;
 
+                println!("==>{:?}, addr:{:#X}", instr, addr);
                 match instr.funct3{
                     //LB
                     0b000 => {
@@ -308,8 +333,9 @@ impl CPU{
             //STORE
             0b010_0011 => {
                 let instr = SType::from(instr);
-                let addr = (instr.rs1 as i32).wrapping_add(instr.imm) as usize;
+                let addr = (self.registers.common[instr.rs1] as i32).wrapping_add(instr.imm) as usize;
 
+                println!("==>{:?}, addr:{:#x}", instr, addr);
                 match instr.funct3 {
                     //SB
                     0b000 => { self.memory.write(addr, &(self.registers.common[instr.rs2] as u8).to_le_bytes()); },
@@ -323,7 +349,8 @@ impl CPU{
             //Integer register-immediate instructions
             0b001_0011 => {
                 let instr = IType::from(instr);
-                
+                println!("==>{:?}", instr);
+
                 match instr.funct3{
                     //ADDI
                     0b000 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] + instr.imm; },
@@ -463,18 +490,46 @@ impl CPU{
             instr.copy_from_slice(chunk);
             let instr = u32::from_le_bytes(instr);
 
+            println!("=>{:#x}", instr);
             self.exec_instruction(instr);
+
+            println!("{:?}", self);
         }
     }
 }
 
+impl fmt::Debug for CPU{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "-----------------------------------------------Registers------------------------------------------------");
+    
+        writeln!(f, "x0:{:#8X}, ra:{:#8X},  sp:{:#8X},  gp:{:#8X}, tp:{:#8X}, t0:{:#8X}, t1:{:#8X}, t2:{:#8X}, ", 
+            self.registers.common[0], self.registers.common[1], self.registers.common[2], self.registers.common[3],
+            self.registers.common[4], self.registers.common[5], self.registers.common[6], self.registers.common[7]);
+        writeln!(f, "s0:{:#8X}, s1:{:#8X},  a0:{:#8X},  a1:{:#8X}, a2:{:#8X}, a3:{:#8X}, a4:{:#8X}, a5:{:#8X}, ", 
+            self.registers.common[8], self.registers.common[9], self.registers.common[10], self.registers.common[11],
+            self.registers.common[12], self.registers.common[13], self.registers.common[14], self.registers.common[15]);
+        writeln!(f, "a6:{:#8X}, a7:{:#8X},  s2:{:#8X},  s3:{:#8X}, s4:{:#8X}, s5:{:#8X}, s6:{:#8X}, s7:{:#8X}, ", 
+            self.registers.common[16], self.registers.common[17], self.registers.common[18], self.registers.common[19],
+            self.registers.common[20], self.registers.common[21], self.registers.common[22], self.registers.common[23]);
+        writeln!(f, "s8:{:#8X}, s9:{:#8X}, s10:{:#8X}, s11:{:#8X}, t3:{:#8X}, t4:{:#8X}, t5:{:#8X}, t6:{:#8X}, ", 
+            self.registers.common[24], self.registers.common[25], self.registers.common[26], self.registers.common[27],
+            self.registers.common[28], self.registers.common[29], self.registers.common[30], self.registers.common[31]);
+        write!(f, "{:?}", self.memory)
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    let mut cpu = CPU::new();
+    //objdump -x main
+    let text_offset = 0x34 as usize;
+    let text_size = 0x48 as usize;
+
+    let mut cpu: CPU = CPU::new();
 
     //Read instructions
-    let data = fs::read("main")?;
+    let mut data = fs::read("test/simple_c/main")?;
+    //This is probably unnecessarely copying data content
+    data = data[text_offset..text_offset + text_size].to_vec();
+    
     cpu.execute(&data);
-
-    println!("After: {:x?}", cpu);
     Ok(())
 }
