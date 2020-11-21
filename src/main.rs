@@ -1,3 +1,5 @@
+use std::fs;
+
 #[derive(Debug)]
 pub struct RType{
     funct7: u8,
@@ -454,15 +456,25 @@ impl CPU{
             _ => unreachable!()
         }
     }
+
+    fn execute(&mut self, data: &[u8]){
+        for chunk in data.chunks(4){
+            let mut instr = [0 as u8; 4];
+            instr.copy_from_slice(chunk);
+            let instr = u32::from_le_bytes(instr);
+
+            self.exec_instruction(instr);
+        }
+    }
 }
 
-
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut cpu = CPU::new();
 
-    //ADDI
-    let instr = 0b011011001110_01110_000_10010_0010011 as u32;
+    //Read instructions
+    let data = fs::read("main")?;
+    cpu.execute(&data);
 
-    cpu.exec_instruction(instr);
     println!("After: {:x?}", cpu);
+    Ok(())
 }
