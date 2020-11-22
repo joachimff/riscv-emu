@@ -213,6 +213,7 @@ impl CPU{
     //Execute one instruction
     pub fn exec_instruction(&mut self, instr: u32){
         let opcode = instr & 0b111_1111;
+        let mut should_incr_pc = true;
 
         match opcode{
             //LUI
@@ -223,6 +224,7 @@ impl CPU{
             //AUIPC TODO: double check
             0b001_0111 => {
                 let instr = UType::from(instr);
+                should_incr_pc = false;
 
                 let addr = (instr.imm as i32) << 12;
                 self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
@@ -230,6 +232,7 @@ impl CPU{
             //JAL
             0b110_1111 => {
                 let instr = JType::from(instr);
+                should_incr_pc = false;
 
                 self.registers.common[2] = self.registers.pc.wrapping_add(4);
                 self.registers.pc = self.registers.common[instr.rd].wrapping_add(instr.imm);
@@ -237,6 +240,7 @@ impl CPU{
             //JALR
             0b110_0111 => {
                 let instr = IType::from(instr);
+                should_incr_pc = false;
 
                 self.registers.common[2] = self.registers.pc.wrapping_add(4);
                 self.registers.pc = (instr.rs1 as i32).wrapping_add(instr.imm);
@@ -244,6 +248,7 @@ impl CPU{
             //Conditional Branches
             0b110_0011 => {
                 let instr = BType::from(instr);
+                should_incr_pc = false;
 
                 match instr.func3 {
                     //BEQ
@@ -482,24 +487,30 @@ impl CPU{
             
             _ => unreachable!()
         }
+
+        if should_incr_pc {
+            self.registers.pc = self.registers.pc.wrapping_add(4);
+        }
     }
 
     fn execute(&mut self, data: &[u8]){
-        for chunk in data.chunks(4){
+        loop {
             let mut instr = [0 as u8; 4];
-            instr.copy_from_slice(chunk);
+            instr.copy_from_slice(&data[self.registers.pc as usize..(self.registers.pc + 4) as usize]);
+
             let instr = u32::from_le_bytes(instr);
 
             println!("=>{:#x}", instr);
             self.exec_instruction(instr);
 
-            println!("{:?}", self);
+            println!("{:?}", self);    
         }
     }
 }
 
 impl fmt::Debug for CPU{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "PC: {:#8X}", self.registers.pc);
         writeln!(f, "-----------------------------------------------Registers------------------------------------------------");
     
         writeln!(f, "x0:{:#8X}, ra:{:#8X},  sp:{:#8X},  gp:{:#8X}, tp:{:#8X}, t0:{:#8X}, t1:{:#8X}, t2:{:#8X}, ", 
