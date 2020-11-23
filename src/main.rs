@@ -1,5 +1,7 @@
-use std::fs;
+extern crate elf;
+
 use std::fmt;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct RType{
@@ -535,12 +537,25 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let text_size = 0x48 as usize;
 
     let mut cpu: CPU = CPU::new();
-
     //Read instructions
-    let mut data = fs::read("test/simple_c/main")?;
-    //This is probably unnecessarely copying data content
-    data = data[text_offset..text_offset + text_size].to_vec();
-    
-    cpu.execute(&data);
+    let path: PathBuf = From::from("test/simple_c/main");
+    let elf = match elf::File::open_path(&path) {
+        Ok(f) => f,
+        Err(e) => panic!("Error {:?}", e)
+    };
+
+    let text_begin = 0;
+    let text_end = 0;
+    for s in elf.sections{
+        if s.shdr.name == ".text"{
+            let text_begin = s.shdr.offset;
+            let text_end = s.shdr.offset + s.shdr.size;
+
+            println!("Entry: {:#08X}, end: {:#08X}", text_begin, text_end);
+            
+            cpu.execute(&s.data);
+            break; 
+        }
+    }
     Ok(())
 }
