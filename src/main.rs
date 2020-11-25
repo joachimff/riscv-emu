@@ -80,9 +80,9 @@ impl From<u32> for JType{
         JType{
             imm: (((instruction >> 21) & 0b1_1111_1111) << 1 |
                 ((instruction >> 20) & 0b1) << 11 |
-                ((instruction >> 12) & 0b1111_1111) << 12 |
+                ((instruction >> 12) & 0b1111_1111) << 12) as i32 |
                 //Sign extended
-                (instruction >> 30) << 20) as i32,
+                (((instruction as i32) >> 30) << 20) as i32,
             rd:     ((instruction >> 7) & 0b11111) as usize,
             opcode: (instruction & 0b111_1111) as u8
         }
