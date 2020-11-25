@@ -1,7 +1,11 @@
+pub mod memory;
+
 extern crate elf;
 
 use std::fmt;
 use std::path::PathBuf;
+
+use memory::{Memory, MEMORY_SIZE};
 
 #[derive(Debug)]
 pub struct RType{
@@ -99,9 +103,9 @@ impl From<u32> for BType{
         BType{
             imm: (((instruction >> 8) & 0b1111) << 1 |
                 ((instruction >> 25) & 0b11_1111) << 5 |
-                ((instruction >> 7) & 0b1) << 11 |
+                ((instruction >> 7) & 0b1) << 11) as i32 |
                 //Sign extended
-                (instruction >> 30) << 12) as i32,
+                (((instruction as i32) >> 31) << 12),
             rs1: ((instruction >> 15) & 0b11111) as usize,
             rs2: ((instruction >> 20) & 0b11111) as usize,
             func3: ((instruction >> 12) & 0b111) as u8,
@@ -150,51 +154,6 @@ impl Registers {
             common: common,
             pc: 0
         }
-    }
-}
-
-const MEMORY_SIZE: usize = 0x20;
-
-//Hold the memory
-struct Memory {
-    data: [u8; MEMORY_SIZE]
-}
-
-//Manage memory
-impl Memory{
-    //Return a new memory with all null data
-    pub fn new() -> Memory {
-        Memory {
-            data: [0; MEMORY_SIZE]
-        }
-    }
-
-    pub fn read(&self, at: usize, buf: &mut [u8]) {
-        buf.copy_from_slice(&self.data[at..at + buf.len()]);
-    }
-
-    pub fn write(&mut self, at: usize, buf: &[u8]){
-        self.data[at..at + buf.len()].copy_from_slice(buf);
-    }
-}
-
-impl fmt::Debug for Memory{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "---------------------------------------------------Memory--------------------------------------------------");
-        
-        let mut i = 0;
-        while i < self.data.len(){
-            if (i % 0x10) == 0{
-                if i != 0 {writeln!(f);}
-                write!(f, "{:#08X}: ", i);
-            }
-            if (i % 2) == 0{
-                write!(f, " ");
-            }
-            write!(f, "{:02X}", self.data[i]);
-            i += 1;
-        }
-        writeln!(f)
     }
 }
 
@@ -250,43 +209,49 @@ impl CPU{
             //Conditional Branches
             0b110_0011 => {
                 let instr = BType::from(instr);
-                should_incr_pc = false;
+                println!("{:?}", instr);
 
                 match instr.func3 {
                     //BEQ
                     0b000 => {
                         if self.registers.common[instr.rs1] == self.registers.common[instr.rs2]{
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            should_incr_pc = false;
                         }
                     },
                     //BNE
                     0b001 => {
                         if self.registers.common[instr.rs1] != self.registers.common[instr.rs2]{
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            should_incr_pc = false;
                         }
                     },
                     //BLT
                     0b100 => {
                         if self.registers.common[instr.rs1] < self.registers.common[instr.rs2]{
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            should_incr_pc = false;
                         }
                     },
                     //BGE
                     0b101 => {
                         if self.registers.common[instr.rs1] > self.registers.common[instr.rs2]{
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            should_incr_pc = false;
                         }
                     }
                     //BLTU
                     0b110 => {
                         if (self.registers.common[instr.rs1] as u32) < (self.registers.common[instr.rs2] as u32){
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            should_incr_pc = false;
                         }
                     }
                     //BGEU
                     0b111 => {
                         if (self.registers.common[instr.rs1] as u32) > (self.registers.common[instr.rs2] as u32){
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            should_incr_pc = false;
                         }
                     },
                     _ => {unreachable!()},
@@ -360,7 +325,7 @@ impl CPU{
 
                 match instr.funct3{
                     //ADDI
-                    0b000 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] + instr.imm; },
+                    0b000 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1].wrapping_add(instr.imm); },
                     //SLTI
                     0b010 => {
                         if self.registers.common[instr.rs1] < instr.imm{
@@ -423,12 +388,12 @@ impl CPU{
                         //ADD
                         if instr.funct7 == 0{
                             self.registers.common[instr.rd] =
-                                self.registers.common[instr.rs1] + self.registers.common[instr.rs2];
+                                self.registers.common[instr.rs1].wrapping_add(self.registers.common[instr.rs2]);
                         }
                         //SUB
                         else{
                             self.registers.common[instr.rd] =
-                                self.registers.common[instr.rs1] - self.registers.common[instr.rs2];
+                                self.registers.common[instr.rs1].wrapping_sub(self.registers.common[instr.rs2]);
                         }
                     },
                     //SLL
@@ -495,10 +460,12 @@ impl CPU{
         }
     }
 
-    fn execute(&mut self, data: &[u8]){
+    fn execute(&mut self, entrypoint: usize){
+        self.registers.pc = entrypoint as i32;
+
         loop {
             let mut instr = [0 as u8; 4];
-            instr.copy_from_slice(&data[self.registers.pc as usize..(self.registers.pc + 4) as usize]);
+            self.memory.read(self.registers.pc as usize, &mut instr);
 
             let instr = u32::from_le_bytes(instr);
 
@@ -532,28 +499,24 @@ impl fmt::Debug for CPU{
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    //objdump -x main
-    let text_offset = 0x34 as usize;
-    let text_size = 0x48 as usize;
-
     let mut cpu: CPU = CPU::new();
+
     //Read instructions
-    let path: PathBuf = From::from("test/simple_c/main");
+    let path: PathBuf = From::from("test/rv32ui-p-add");
     let elf = match elf::File::open_path(&path) {
         Ok(f) => f,
         Err(e) => panic!("Error {:?}", e)
     };
 
-    let text_begin = 0;
-    let text_end = 0;
+    let entry_point = elf.ehdr.entry;
+    println!("Entry point: {:#X}", entry_point);
     for s in elf.sections{
-        if s.shdr.name == ".text"{
-            let text_begin = s.shdr.offset;
-            let text_end = s.shdr.offset + s.shdr.size;
+        if s.shdr.name == ".text.init"{
+            cpu.memory.allocate(&s.data);
 
-            println!("Entry: {:#08X}, end: {:#08X}", text_begin, text_end);
+            println!("{:X?}", s.shdr);
             
-            cpu.execute(&s.data);
+            cpu.execute(0x80000174 as usize);
             break; 
         }
     }
