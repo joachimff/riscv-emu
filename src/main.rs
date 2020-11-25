@@ -4,6 +4,9 @@ extern crate elf;
 
 use std::fmt;
 use std::path::PathBuf;
+use std::collections::HashMap;
+use std::str;
+use core::convert::TryInto;
 
 use memory::{Memory, MEMORY_SIZE};
 
@@ -498,11 +501,54 @@ impl fmt::Debug for CPU{
     }
 }
 
+#[derive(Debug)]
+struct Symbol{
+    name: u32,
+    value: u32,
+    size: u32,
+    info: u8,
+    other: u8,
+    shndx: u16,
+}
+
+impl Symbol{
+    fn read_symbol(data: &[u8]) -> Symbol{
+        //println!("=>{:X?}", data);
+        Symbol{
+            name: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+            value: u32::from_le_bytes(data[4..8].try_into().unwrap()),
+            size: u32::from_le_bytes(data[8..12].try_into().unwrap()),
+            info: data[12],
+            other: data[13],
+            shndx: u16::from_le_bytes(data[14..16].try_into().unwrap()),
+        }
+    }
+}
+
+fn read_symbols_list(symtab: elf::Section, strtab: elf::Section) -> HashMap<String, usize>{
+    let mut ret = HashMap::new();
+
+    for i in (0..symtab.data.len()).step_by(16){
+        let s = Symbol::read_symbol(&symtab.data[i..]);
+        println!("===>{:X?}", s);
+
+        let name = str::from_utf8(&strtab.data[(s.name as usize)..]);
+        if let Ok(name) = name{
+            let name_end = name.find("\0");
+            if let Some(name_end) = name_end{
+                println!("=====>{:X?}", name[0..name_end]);
+            }
+        }
+    }
+    ret
+}
+
+
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut cpu: CPU = CPU::new();
 
     //Read instructions
-    let path: PathBuf = From::from("test/rv32ui-p-add");
+    let path: PathBuf = From::from("test/riscv-tests/rv32ui-p-ori");
     let elf = match elf::File::open_path(&path) {
         Ok(f) => f,
         Err(e) => panic!("Error {:?}", e)
@@ -510,15 +556,48 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let entry_point = elf.ehdr.entry;
     println!("Entry point: {:#X}", entry_point);
-    for s in elf.sections{
-        if s.shdr.name == ".text.init"{
-            cpu.memory.allocate(&s.data);
 
-            println!("{:X?}", s.shdr);
-            
-            cpu.execute(0x80000174 as usize);
-            break; 
+    let mut symtab: Option<elf::Section> = None;
+    let mut strtab: Option<elf::Section> = None;
+
+    for s in elf.sections{
+        match s.shdr.name.as_ref() {
+            ".text.init" => {
+                cpu.memory.allocate(&s.data);
+                println!("{:X?}", s.shdr);
+
+            },
+            ".symtab" => {
+                symtab = Some(s); 
+            },
+            ".strtab" => {
+                strtab = Some(s);
+            }
+            _ => {},
         }
     }
+
+    match symtab{
+        Some(symtab) => {
+            match strtab{
+                Some(strtab) => {
+                    read_symbols_list(symtab, strtab);
+                },
+                _ => {}
+            }
+        },
+        _ => {}
+    }
+
+    /*
+    let mut i = 0;
+    loop {
+        println!("===>{:X?}", Symbol::read_symbol(&symtab.data[i..]));
+
+        i += 16;
+    }*/
+
+    //Always start at the same offset, we skip the whole init part
+    //cpu.execute(0x80000174 as usize);
     Ok(())
 }
