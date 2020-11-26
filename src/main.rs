@@ -6,6 +6,7 @@ extern crate elf;
 use std::fmt;
 use std::path::PathBuf;
 use std::collections::HashMap;
+use std::fs;
 
 use memory::{Memory, MEMORY_SIZE};
 
@@ -162,6 +163,7 @@ impl Registers {
 struct CPU{
     memory: Memory,
     registers: Registers,
+    exit: bool, //Exit the execution
     breakpoints: HashMap<usize, fn(&mut CPU)>,
 }
 
@@ -171,6 +173,7 @@ impl CPU{
         CPU{
             memory: Memory::new(),
             registers: Registers::new(),
+            exit: false,
             breakpoints: HashMap::new(),
         }
     }
@@ -213,7 +216,7 @@ impl CPU{
             //Conditional Branches
             0b110_0011 => {
                 let instr = BType::from(instr);
-                println!("{:?}", instr);
+                //println!("{:?}", instr);
 
                 match instr.func3 {
                     //BEQ
@@ -266,7 +269,7 @@ impl CPU{
                 let instr = IType::from(instr);
                 let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm) as usize;
 
-                println!("==>{:?}, addr:{:#X}", instr, addr);
+                //println!("==>{:?}, addr:{:#X}", instr, addr);
                 match instr.funct3{
                     //LB
                     0b000 => {
@@ -311,7 +314,7 @@ impl CPU{
                 let instr = SType::from(instr);
                 let addr = (self.registers.common[instr.rs1] as i32).wrapping_add(instr.imm) as usize;
 
-                println!("==>{:?}, addr:{:#x}", instr, addr);
+                //println!("==>{:?}, addr:{:#x}", instr, addr);
                 match instr.funct3 {
                     //SB
                     0b000 => { self.memory.write(addr, &(self.registers.common[instr.rs2] as u8).to_le_bytes()); },
@@ -325,7 +328,7 @@ impl CPU{
             //Integer register-immediate instructions
             0b001_0011 => {
                 let instr = IType::from(instr);
-                println!("==>{:?}", instr);
+                //println!("==>{:?}", instr);
 
                 match instr.funct3{
                     //ADDI
@@ -473,15 +476,19 @@ impl CPU{
 
             let instr = u32::from_le_bytes(instr);
 
-            println!("[PC:{:#8X}]=>{:#x}", self.registers.pc, instr);
+            //println!("[PC:{:#8X}]=>{:#x}", self.registers.pc, instr);
 
             if let Some(b) = self.breakpoints.get(&(self.registers.pc as usize & 0xFFFF_FFFF)){
                 println!("<========>BREAKPOINT HIT<=========>");
                 b(self);
             }
 
+            if self.exit{
+                break;
+            }
+
             self.exec_instruction(instr);
-            println!();
+            //println!();
         }
     }
 
@@ -492,6 +499,7 @@ impl CPU{
 
 fn bp_end_of_test(cpu: &mut CPU){
     println!("Tests OK");
+    cpu.exit = true;
 }
 
 fn bp_test_error(cpu: &mut CPU){
@@ -520,11 +528,11 @@ impl fmt::Debug for CPU{
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
+fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>{
     let mut cpu: CPU = CPU::new();
 
     //Read instructions
-    let path: PathBuf = From::from("test/riscv-tests/rv32ui-p-ori");
+    //let path: PathBuf = From::from(path);
     let elf = match elf::File::open_path(&path) {
         Ok(f) => f,
         Err(e) => panic!("Error {:?}", e)
@@ -592,4 +600,12 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     }
 
     Ok(())
+}
+
+fn main(){
+    let paths = fs::read_dir("test/riscv-tests/").unwrap();
+    for p in paths{
+        println!("Executing test: {:?}", p);
+        start_elf(&p.unwrap().path());
+    }
 }
