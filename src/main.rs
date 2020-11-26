@@ -1,12 +1,11 @@
 pub mod memory;
+pub mod elf_reader;
 
 extern crate elf;
 
 use std::fmt;
 use std::path::PathBuf;
 use std::collections::HashMap;
-use std::str;
-use core::convert::TryInto;
 
 use memory::{Memory, MEMORY_SIZE};
 
@@ -163,6 +162,7 @@ impl Registers {
 struct CPU{
     memory: Memory,
     registers: Registers,
+    breakpoints: HashMap<usize, fn(&mut CPU)>,
 }
 
 impl CPU{
@@ -171,6 +171,7 @@ impl CPU{
         CPU{
             memory: Memory::new(),
             registers: Registers::new(),
+            breakpoints: HashMap::new(),
         }
     }
 
@@ -472,12 +473,30 @@ impl CPU{
 
             let instr = u32::from_le_bytes(instr);
 
-            println!("=>{:#x}", instr);
-            self.exec_instruction(instr);
+            println!("[PC:{:#8X}]=>{:#x}", self.registers.pc, instr);
 
-            println!("{:?}", self);    
+            if let Some(b) = self.breakpoints.get(&(self.registers.pc as usize & 0xFFFF_FFFF)){
+                println!("<========>BREAKPOINT HIT<=========>");
+                b(self);
+            }
+
+            self.exec_instruction(instr);
+            println!();
         }
     }
+
+    fn set_breakpoint(&mut self, at: usize, handler: fn(&mut CPU)){
+        self.breakpoints.insert(at, handler);
+    }
+}
+
+fn bp_end_of_test(cpu: &mut CPU){
+    println!("Tests OK");
+}
+
+fn bp_test_error(cpu: &mut CPU){
+    println!("{:?}", cpu);
+    panic!("Fail on test: {:#8?}", cpu.registers.common[3]);
 }
 
 impl fmt::Debug for CPU{
@@ -501,49 +520,6 @@ impl fmt::Debug for CPU{
     }
 }
 
-#[derive(Debug)]
-struct Symbol{
-    name: u32,
-    value: u32,
-    size: u32,
-    info: u8,
-    other: u8,
-    shndx: u16,
-}
-
-impl Symbol{
-    fn read_symbol(data: &[u8]) -> Symbol{
-        //println!("=>{:X?}", data);
-        Symbol{
-            name: u32::from_le_bytes(data[0..4].try_into().unwrap()),
-            value: u32::from_le_bytes(data[4..8].try_into().unwrap()),
-            size: u32::from_le_bytes(data[8..12].try_into().unwrap()),
-            info: data[12],
-            other: data[13],
-            shndx: u16::from_le_bytes(data[14..16].try_into().unwrap()),
-        }
-    }
-}
-
-fn read_symbols_list(symtab: elf::Section, strtab: elf::Section) -> HashMap<String, usize>{
-    let mut ret = HashMap::new();
-
-    for i in (0..symtab.data.len()).step_by(16){
-        let s = Symbol::read_symbol(&symtab.data[i..]);
-        println!("===>{:X?}", s);
-
-        let name = str::from_utf8(&strtab.data[(s.name as usize)..]);
-        if let Ok(name) = name{
-            let name_end = name.find("\0");
-            if let Some(name_end) = name_end{
-                println!("=====>{:X?}", name[0..name_end]);
-            }
-        }
-    }
-    ret
-}
-
-
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut cpu: CPU = CPU::new();
 
@@ -564,8 +540,6 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         match s.shdr.name.as_ref() {
             ".text.init" => {
                 cpu.memory.allocate(&s.data);
-                println!("{:X?}", s.shdr);
-
             },
             ".symtab" => {
                 symtab = Some(s); 
@@ -581,7 +555,35 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         Some(symtab) => {
             match strtab{
                 Some(strtab) => {
-                    read_symbols_list(symtab, strtab);
+                    let symbols =  elf_reader::read_symbols_list(symtab, strtab);
+                    
+                    //Set a breakpoint on the success function of the test
+                    if let Some(addr) = symbols.get("pass"){
+                        println!("Breakpoint set at pass ({:#8X})", addr);
+                        cpu.set_breakpoint(*addr, bp_end_of_test);
+                    }
+                    else{
+                        println!("Couldnt find pass in exported symbols");
+                    }
+                    
+                    //Set a breakpoint on the failure function of the test
+                    if let Some(addr) = symbols.get("fail"){
+                        println!("Breakpoint set at fail ({:#8X})", addr);
+                        cpu.set_breakpoint(*addr, bp_test_error);
+                    }
+                    else{
+                        println!("Couldnt find pass in exported symbols");
+                    }
+
+                    //We start from the first test in order to skip the init part which requires 
+                    //csrc extension
+                    if let Some(entrypoint) = symbols.get("test_2"){
+                        println!("Test_2 found at {:#8X}", entrypoint);
+                        cpu.execute(*entrypoint);
+                    }
+                    else{
+                        panic!("Couldnt find Test_2 in exported symbols");
+                    }
                 },
                 _ => {}
             }
@@ -589,15 +591,5 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         _ => {}
     }
 
-    /*
-    let mut i = 0;
-    loop {
-        println!("===>{:X?}", Symbol::read_symbol(&symtab.data[i..]));
-
-        i += 16;
-    }*/
-
-    //Always start at the same offset, we skip the whole init part
-    //cpu.execute(0x80000174 as usize);
     Ok(())
 }
