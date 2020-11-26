@@ -189,21 +189,25 @@ impl CPU{
                 let instr = UType::from(instr);
                 self.registers.common[instr.rd] = (instr.imm as i32) << 12; 
             },
-            //AUIPC TODO: double check
+            //AUIPC
             0b001_0111 => {
                 let instr = UType::from(instr);
-                should_incr_pc = false;
-
-                let addr = (instr.imm as i32) << 12;
+                println!("{:?}", instr);
+                let addr = (instr.imm << 12) as i32;
+                println!("{:X?}", addr);
                 self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
             },
             //JAL
             0b110_1111 => {
                 let instr = JType::from(instr);
+                println!("{:?}", instr);
                 should_incr_pc = false;
 
-                self.registers.common[2] = self.registers.pc.wrapping_add(4);
-                self.registers.pc = self.registers.common[instr.rd].wrapping_add(instr.imm);
+                //plain unconditionnal jump are encoded with rd=x0
+                if self.registers.common[instr.rd] != 0{
+                    self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
+                }
+                self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
             },
             //JALR
             0b110_0111 => {
@@ -242,7 +246,7 @@ impl CPU{
                     },
                     //BGE
                     0b101 => {
-                        if self.registers.common[instr.rs1] > self.registers.common[instr.rs2]{
+                        if self.registers.common[instr.rs1] >= self.registers.common[instr.rs2]{
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
                             should_incr_pc = false;
                         }
@@ -256,7 +260,7 @@ impl CPU{
                     }
                     //BGEU
                     0b111 => {
-                        if (self.registers.common[instr.rs1] as u32) > (self.registers.common[instr.rs2] as u32){
+                        if (self.registers.common[instr.rs1] as u32) >= (self.registers.common[instr.rs2] as u32){
                             self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
                             should_incr_pc = false;
                         }
@@ -328,7 +332,7 @@ impl CPU{
             //Integer register-immediate instructions
             0b001_0011 => {
                 let instr = IType::from(instr);
-                //println!("==>{:?}", instr);
+                println!("==>{:?}", instr);
 
                 match instr.funct3{
                     //ADDI
@@ -457,7 +461,7 @@ impl CPU{
             //FENCE
             0b000_1111 => { panic!("FENCE NYI"); },
             //ECALL EBREAK
-            0b111_0011 => { panic!("ECALL/EBREAK NYI"); },
+            0b111_0011 => { panic!("ECALL/EBREAK NYI, pc={:X?}", self.registers.pc); },
             
             _ => unreachable!()
         }
@@ -476,7 +480,7 @@ impl CPU{
 
             let instr = u32::from_le_bytes(instr);
 
-            //println!("[PC:{:#8X}]=>{:#x}", self.registers.pc, instr);
+            println!("[PC:{:#8X}]=>{:#x}", self.registers.pc, instr);
 
             if let Some(b) = self.breakpoints.get(&(self.registers.pc as usize & 0xFFFF_FFFF)){
                 println!("<========>BREAKPOINT HIT<=========>");
@@ -488,6 +492,7 @@ impl CPU{
             }
 
             self.exec_instruction(instr);
+            println!("{:?}", self);
             //println!();
         }
     }
