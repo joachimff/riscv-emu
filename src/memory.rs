@@ -10,7 +10,6 @@ struct MemoryRegion{
 }
 
 //Hold the memory
-#[derive(Debug)]
 pub struct Memory {
     data: [u8; STACK_SIZE],
     allocated: Vec<MemoryRegion>,
@@ -60,9 +59,9 @@ impl Memory{
     }
 }
 
-/*
 impl fmt::Debug for Memory{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        /*
         writeln!(f, "---------------------------------------------------Memory--------------------------------------------------");
         
         let mut i = 0;
@@ -78,7 +77,7 @@ impl fmt::Debug for Memory{
             i += 1;
         }
         writeln!(f)
+        */
         writeln!(f)
     }
 }
-*/

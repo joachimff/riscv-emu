@@ -432,10 +432,11 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
     let mut strtab: Option<elf::Section> = None;
 
     for s in elf.sections{
+        if (s.shdr.flags.0 & elf::types::SHF_ALLOC.0) != 0 {
+            cpu.memory.allocate(s.shdr.addr as u32, s.shdr.size as usize, &s.data);
+        }
+
         match s.shdr.name.as_ref() {
-            ".text.init" => {
-                cpu.memory.allocate(s.shdr.addr as u32, s.shdr.size as usize, &s.data);
-            },
             ".symtab" => {
                 symtab = Some(s); 
             },
@@ -496,7 +497,7 @@ fn main(){
     for p in paths{
         println!("Executing test: {:?}({:})", p, i);
         start_elf(&p.unwrap().path());
-        
+
         i += 1;
     }
     println!("{:} tests passed", i);
