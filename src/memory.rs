@@ -24,25 +24,21 @@ impl Memory{
             allocated: Vec::new()
         }
     }
-    //Translate a virtual adress to local
-    //Basically just remove 0x8000_0000
-    pub fn virt_to_local(virt: usize) -> usize{
-        virt & 0xFF_FFFF
-    }
     
     pub fn read(&self, at: u32, buf: &mut [u8]) {
         for m in &self.allocated{
             if at >= m.virt_addr && at <= (m.virt_addr + m.size as u32){
                 buf.copy_from_slice(&m.data[(at - m.virt_addr) as usize..(at - m.virt_addr) as usize + buf.len()]);
+                return
             }
         }
-
     }
 
     pub fn write(&mut self, at: u32, buf: &[u8]){
         for m in &mut self.allocated{
             if at >= m.virt_addr && at <= (m.virt_addr + m.size as u32){
                 m.data[(at - m.virt_addr) as usize..(at - m.virt_addr) as usize + buf.len()].copy_from_slice(buf);
+                return;
             }
         }
         panic!("Try to get memory unmapped at: {:#8X}", at);

@@ -434,6 +434,7 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
     for s in elf.sections{
         if (s.shdr.flags.0 & elf::types::SHF_ALLOC.0) != 0 {
             cpu.memory.allocate(s.shdr.addr as u32, s.shdr.size as usize, &s.data);
+            println!("Section mapped:\n{:X?}", s.shdr);
         }
 
         match s.shdr.name.as_ref() {
@@ -446,7 +447,6 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
             _ => {},
         }
     }
-    println!("{:X?}", cpu.memory);
     
     match symtab{
         Some(symtab) => {
