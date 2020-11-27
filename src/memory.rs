@@ -1,10 +1,10 @@
 use std::fmt;
 
-pub const MEMORY_SIZE: usize = 0x1000;
+pub const STACK_SIZE: usize = 0x1000;
 
 //Hold the memory
 pub struct Memory {
-    data: [u8; MEMORY_SIZE]
+    data: [u8; STACK_SIZE]
 }
 
 //Manage memory
@@ -12,7 +12,7 @@ impl Memory{
     //Return a new memory with all null data
     pub fn new() -> Memory {
         Memory {
-            data: [0; MEMORY_SIZE]
+            data: [0; STACK_SIZE]
         }
     }
     //Translate a virtual adress to local

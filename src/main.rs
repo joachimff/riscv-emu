@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 use std::fs;
 
-use memory::{Memory, MEMORY_SIZE};
+use memory::{Memory, STACK_SIZE};
 use instr_type::{*};
 
 
@@ -17,14 +17,14 @@ use instr_type::{*};
 // Hold the registers 
 #[derive(Debug)]
 struct Registers{
-    common: [i32; 32],
-    pc: i32,
+    common: [u32; 32],
+    pc: u32,
 }
 
 impl Registers {
     pub fn new() -> Registers {
         let mut common = [0; 32];
-        common[2] = MEMORY_SIZE as i32;
+        common[2] = STACK_SIZE as u32;
 
         Registers{
             common: common,
@@ -60,13 +60,14 @@ impl CPU{
             //LUI
             0b011_0111 => {
                 let instr = UType::from(instr);
-                self.registers.common[instr.rd] = (instr.imm as i32) << 12; 
+                println!("{:X?}", instr);
+                self.registers.common[instr.rd] = instr.imm << 12; 
             },
             //AUIPC
             0b001_0111 => {
                 let instr = UType::from(instr);
                 println!("{:?}", instr);
-                let addr = (instr.imm << 12) as i32;
+                let addr = (instr.imm << 12) as u32;
                 println!("{:X?}", addr);
                 self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
             },
@@ -80,14 +81,14 @@ impl CPU{
                 if instr.rd != 0{
                     self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
                 }
-                self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
             },
             //JALR
             0b110_0111 => {
                 let instr = IType::from(instr);
                 should_incr_pc = false;
 
-                let target = self.registers.common[instr.rs1].wrapping_add(instr.imm);
+                let target = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32);
                 
                 if instr.rd != 0{
                     self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
@@ -103,42 +104,42 @@ impl CPU{
                     //BEQ
                     0b000 => {
                         if self.registers.common[instr.rs1] == self.registers.common[instr.rs2]{
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
                             should_incr_pc = false;
                         }
                     },
                     //BNE
                     0b001 => {
                         if self.registers.common[instr.rs1] != self.registers.common[instr.rs2]{
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
                             should_incr_pc = false;
                         }
                     },
                     //BLT
                     0b100 => {
-                        if self.registers.common[instr.rs1] < self.registers.common[instr.rs2]{
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                        if (self.registers.common[instr.rs1] as i32) < (self.registers.common[instr.rs2] as i32){
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
                             should_incr_pc = false;
                         }
                     },
                     //BGE
                     0b101 => {
-                        if self.registers.common[instr.rs1] >= self.registers.common[instr.rs2]{
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                        if (self.registers.common[instr.rs1] as i32) >= (self.registers.common[instr.rs2] as i32){
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
                             should_incr_pc = false;
                         }
                     }
                     //BLTU
                     0b110 => {
                         if (self.registers.common[instr.rs1] as u32) < (self.registers.common[instr.rs2] as u32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
                             should_incr_pc = false;
                         }
                     }
                     //BGEU
                     0b111 => {
                         if (self.registers.common[instr.rs1] as u32) >= (self.registers.common[instr.rs2] as u32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
                             should_incr_pc = false;
                         }
                     },
@@ -148,7 +149,7 @@ impl CPU{
             //LOAD 
             0b000_0011 => {
                 let instr = IType::from(instr);
-                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm) as usize;
+                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32) as usize;
 
                 println!("==>{:?}, addr:{:#X}", instr, addr);
                 match instr.funct3{
@@ -157,35 +158,35 @@ impl CPU{
                         let mut buf = [0u8; 1];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = i8::from_le_bytes(buf) as i32;
+                        self.registers.common[instr.rd] = i8::from_le_bytes(buf) as u32;
                     },
                     //LH
                     0b001 => {
                         let mut buf = [0u8; 2];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = i16::from_le_bytes(buf) as i32;
+                        self.registers.common[instr.rd] = i16::from_le_bytes(buf) as u32;
                     },
                     //LW
                     0b010 => {
                         let mut buf = [0u8; 4];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = i32::from_le_bytes(buf);
+                        self.registers.common[instr.rd] = i32::from_le_bytes(buf) as u32;
                     },
                     //LBU
                     0b100 => {
                         let mut buf = [0u8; 1];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = u8::from_le_bytes(buf) as i32;
+                        self.registers.common[instr.rd] = u8::from_le_bytes(buf) as u32;
                     },
                     //LHU
                     0b101 => {
                         let mut buf = [0u8; 2];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = u16::from_le_bytes(buf) as i32;
+                        self.registers.common[instr.rd] = u16::from_le_bytes(buf) as u32;
                     },
                     _ => {unreachable!()}
                 }
@@ -193,7 +194,7 @@ impl CPU{
             //STORE
             0b010_0011 => {
                 let instr = SType::from(instr);
-                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm) as usize;
+                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32) as usize;
 
                 //println!("==>{:?}, addr:{:#x}", instr, addr);
                 match instr.funct3 {
@@ -214,12 +215,12 @@ impl CPU{
                 match instr.funct3{
                     //ADDI
                     0b000 => { 
-                        self.registers.common[instr.rd] = self.registers.common[instr.rs1].wrapping_add(instr.imm); 
+                        self.registers.common[instr.rd] = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32); 
                     },
 
                     //SLTI
                     0b010 => {
-                        if self.registers.common[instr.rs1] < instr.imm{
+                        if (self.registers.common[instr.rs1] as i32) < instr.imm{
                             self.registers.common[instr.rd] = 1;
                         }
                         else{
@@ -244,11 +245,11 @@ impl CPU{
                         }
                     },
                     //XORI
-                    0b100 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] ^ instr.imm; },
+                    0b100 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] ^ (instr.imm as u32); },
                     //ORI
-                    0b110 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] | instr.imm; },
+                    0b110 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] | (instr.imm as u32); },
                     //ANDI
-                    0b111 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] & instr.imm; },
+                    0b111 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] & (instr.imm as u32); },
                     
                     //These three instructions have a special encoding
                     //SLLI
@@ -261,11 +262,11 @@ impl CPU{
                         
                         //SRAI
                         if ((instr.imm >> 10) & 0b1) == 1{
-                            self.registers.common[instr.rd] = self.registers.common[instr.rs1] >> shamt;
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) >> shamt) as u32;
                         }
                         //SRLI
                         else{
-                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as u32) >> shamt as u32) as i32; 
+                            self.registers.common[instr.rd] = self.registers.common[instr.rs1] >> (shamt as u32); 
                         }
                     },
                     _ => { unreachable!() }
@@ -294,7 +295,8 @@ impl CPU{
                     },
                     //SLT
                     0b010 => {
-                        self.registers.common[instr.rd] = if self.registers.common[instr.rs1] < self.registers.common[instr.rs2] {1} else {0};
+                        self.registers.common[instr.rd] = 
+                            if (self.registers.common[instr.rs1] as i32) < (self.registers.common[instr.rs2] as i32) {1} else {0};
                     },
                     //SLTU
                     0b011 => {
@@ -317,12 +319,12 @@ impl CPU{
                         //SRL
                         if instr.funct7 == 0{
                             self.registers.common[instr.rd] =
-                                ((self.registers.common[instr.rs1] as u32) >> ((self.registers.common[instr.rs2] as u32) & 0b1_1111)) as i32;
+                                self.registers.common[instr.rs1] >> (self.registers.common[instr.rs2] & 0b1_1111);
                         }
                         //SRA
                         else {
                             self.registers.common[instr.rd] =
-                                self.registers.common[instr.rs1] >> (self.registers.common[instr.rs2] & 0b1_1111);
+                                ((self.registers.common[instr.rs1] as i32) >> (self.registers.common[instr.rs2] & 0b1_1111)) as u32;
                         }
                     }
                     //OR
@@ -352,7 +354,7 @@ impl CPU{
     }
 
     fn execute(&mut self, entrypoint: usize){
-        self.registers.pc = entrypoint as i32;
+        self.registers.pc = entrypoint as u32;
 
         loop {
             let mut instr = [0 as u8; 4];
