@@ -86,7 +86,7 @@ impl From<u32> for JType{
                 ((instruction >> 12) & 0b1111_1111) << 12) as i32 |
                 //Sign extended
                 (((instruction as i32) >> 30) << 20) as i32,
-            rd:     ((instruction >> 7) & 0b11111) as usize,
+            rd:     ((instruction >> 7) & 0b1_1111) as usize,
             opcode: (instruction & 0b111_1111) as u8
         }
     }
@@ -200,11 +200,11 @@ impl CPU{
             //JAL
             0b110_1111 => {
                 let instr = JType::from(instr);
-                println!("{:?}", instr);
+                println!("JAL: {:?}", instr);
                 should_incr_pc = false;
 
                 //plain unconditionnal jump are encoded with rd=x0
-                if self.registers.common[instr.rd] != 0{
+                if instr.rd != 0{
                     self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
                 }
                 self.registers.pc = self.registers.pc.wrapping_add(instr.imm);
@@ -214,8 +214,12 @@ impl CPU{
                 let instr = IType::from(instr);
                 should_incr_pc = false;
 
-                self.registers.common[2] = self.registers.pc.wrapping_add(4);
-                self.registers.pc = (instr.rs1 as i32).wrapping_add(instr.imm);
+                let target = self.registers.common[instr.rs1].wrapping_add(instr.imm);
+                
+                if instr.rd != 0{
+                    self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
+                }
+                self.registers.pc = target;
             },
             //Conditional Branches
             0b110_0011 => {
@@ -273,7 +277,7 @@ impl CPU{
                 let instr = IType::from(instr);
                 let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm) as usize;
 
-                //println!("==>{:?}, addr:{:#X}", instr, addr);
+                println!("==>{:?}, addr:{:#X}", instr, addr);
                 match instr.funct3{
                     //LB
                     0b000 => {
@@ -316,7 +320,7 @@ impl CPU{
             //STORE
             0b010_0011 => {
                 let instr = SType::from(instr);
-                let addr = (self.registers.common[instr.rs1] as i32).wrapping_add(instr.imm) as usize;
+                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm) as usize;
 
                 //println!("==>{:?}, addr:{:#x}", instr, addr);
                 match instr.funct3 {
@@ -336,7 +340,10 @@ impl CPU{
 
                 match instr.funct3{
                     //ADDI
-                    0b000 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1].wrapping_add(instr.imm); },
+                    0b000 => { 
+                        self.registers.common[instr.rd] = self.registers.common[instr.rs1].wrapping_add(instr.imm); 
+                    },
+
                     //SLTI
                     0b010 => {
                         if self.registers.common[instr.rs1] < instr.imm{
@@ -349,7 +356,7 @@ impl CPU{
                     //SLTIU
                     0b011 => {
                         //Special case
-                        if instr.imm == 0{
+                        if instr.imm == 1{
                             self.registers.common[instr.rd] = 
                                 if self.registers.common[instr.rs1] == 0 {1} else {0};
                         }
@@ -380,8 +387,8 @@ impl CPU{
                         let shamt = instr.imm & 0b1_1111;
                         
                         //SRAI
-                        if ((instr.imm >> 11) & 0b1) == 1{
-                            self.registers.common[instr.rd] = (self.registers.common[instr.rs1] as i32) >> shamt;
+                        if ((instr.imm >> 10) & 0b1) == 1{
+                            self.registers.common[instr.rd] = self.registers.common[instr.rs1] >> shamt;
                         }
                         //SRLI
                         else{
@@ -405,16 +412,16 @@ impl CPU{
                         else{
                             self.registers.common[instr.rd] =
                                 self.registers.common[instr.rs1].wrapping_sub(self.registers.common[instr.rs2]);
-                        }
+                        } 
                     },
                     //SLL
                     0b001 => {
                         self.registers.common[instr.rd] =
-                            self.registers.common[instr.rs1] << (instr.rs2 & 0b1_1111);
+                            self.registers.common[instr.rs1] << (self.registers.common[instr.rs2] & 0b1_1111);
                     },
                     //SLT
                     0b010 => {
-                        self.registers.common[instr.rd] = if instr.rs1 < instr.rs2 {1} else {0};
+                        self.registers.common[instr.rd] = if self.registers.common[instr.rs1] < self.registers.common[instr.rs2] {1} else {0};
                     },
                     //SLTU
                     0b011 => {
@@ -425,7 +432,7 @@ impl CPU{
                         }
                         else {
                             self.registers.common[instr.rd] = 
-                                if (instr.rs1 as u32) < (instr.rs2 as u32) {1} else {0};
+                                if (self.registers.common[instr.rs1] as u32) < (self.registers.common[instr.rs2] as u32) {1} else {0};
                         }
                     },
                     //XOR
@@ -437,12 +444,12 @@ impl CPU{
                         //SRL
                         if instr.funct7 == 0{
                             self.registers.common[instr.rd] =
-                                ((self.registers.common[instr.rs1] as u32) >> (instr.rs2 & 0b1_1111)) as i32;
+                                ((self.registers.common[instr.rs1] as u32) >> ((self.registers.common[instr.rs2] as u32) & 0b1_1111)) as i32;
                         }
                         //SRA
                         else {
                             self.registers.common[instr.rd] =
-                                self.registers.common[instr.rs1] >> (instr.rs2 & 0b1_1111);
+                                self.registers.common[instr.rs1] >> (self.registers.common[instr.rs2] & 0b1_1111);
                         }
                     }
                     //OR
@@ -609,8 +616,12 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
 
 fn main(){
     let paths = fs::read_dir("test/riscv-tests/").unwrap();
+    let mut i =0;
     for p in paths{
-        println!("Executing test: {:?}", p);
+        println!("Executing test: {:?}({:})", p, i);
         start_elf(&p.unwrap().path());
+
+        i += 1;
     }
+    println!("{:} tests passed", i);
 }
