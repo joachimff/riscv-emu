@@ -17,14 +17,14 @@ use instr_type::{*};
 // Hold the registers 
 #[derive(Debug)]
 struct Registers{
-    common: [u32; 32],
-    pc: u32,
+    common: [u64; 32],
+    pc: u64,
 }
 
 impl Registers {
     pub fn new() -> Registers {
         let mut common = [0; 32];
-        common[2] = STACK_SIZE as u32;
+        common[2] = STACK_SIZE as u64;
 
         Registers{
             common: common,
@@ -61,14 +61,14 @@ impl CPU{
             0b011_0111 => {
                 let instr = UType::from(instr);
                 println!("{:X?}", instr);
-                self.registers.common[instr.rd] = instr.imm << 12; 
+                self.registers.common[instr.rd] = (instr.imm << 12) as i64 as u64; 
             },
             //AUIPC
             0b001_0111 => {
                 let instr = UType::from(instr);
                 println!("{:?}", instr);
-                let addr = (instr.imm << 12) as u32;
-                println!("{:X?}", addr);
+
+                let addr = (instr.imm << 12) as i64 as u64;
                 self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
             },
             //JAL
@@ -81,14 +81,14 @@ impl CPU{
                 if instr.rd != 0{
                     self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
                 }
-                self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
+                self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
             },
             //JALR
             0b110_0111 => {
                 let instr = IType::from(instr);
                 should_incr_pc = false;
 
-                let target = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32);
+                let target = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64);
                 
                 if instr.rd != 0{
                     self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
@@ -104,42 +104,42 @@ impl CPU{
                     //BEQ
                     0b000 => {
                         if self.registers.common[instr.rs1] == self.registers.common[instr.rs2]{
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
                             should_incr_pc = false;
                         }
                     },
                     //BNE
                     0b001 => {
                         if self.registers.common[instr.rs1] != self.registers.common[instr.rs2]{
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
                             should_incr_pc = false;
                         }
                     },
                     //BLT
                     0b100 => {
                         if (self.registers.common[instr.rs1] as i32) < (self.registers.common[instr.rs2] as i32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
                             should_incr_pc = false;
                         }
                     },
                     //BGE
                     0b101 => {
                         if (self.registers.common[instr.rs1] as i32) >= (self.registers.common[instr.rs2] as i32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
                             should_incr_pc = false;
                         }
                     }
                     //BLTU
                     0b110 => {
                         if (self.registers.common[instr.rs1] as u32) < (self.registers.common[instr.rs2] as u32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
                             should_incr_pc = false;
                         }
                     }
                     //BGEU
                     0b111 => {
                         if (self.registers.common[instr.rs1] as u32) >= (self.registers.common[instr.rs2] as u32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u32);
+                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
                             should_incr_pc = false;
                         }
                     },
@@ -149,7 +149,7 @@ impl CPU{
             //LOAD 
             0b000_0011 => {
                 let instr = IType::from(instr);
-                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32);
+                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64);
 
                 println!("==>{:?}, addr:{:#X}", instr, addr);
                 match instr.funct3{
@@ -158,43 +158,58 @@ impl CPU{
                         let mut buf = [0u8; 1];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = i8::from_le_bytes(buf) as u32;
+                        self.registers.common[instr.rd] = i8::from_le_bytes(buf) as i64 as u64;
                     },
                     //LH
                     0b001 => {
                         let mut buf = [0u8; 2];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = i16::from_le_bytes(buf) as u32;
+                        self.registers.common[instr.rd] = i16::from_le_bytes(buf) as i64 as u64;
                     },
                     //LW
                     0b010 => {
                         let mut buf = [0u8; 4];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = i32::from_le_bytes(buf) as u32;
+                        self.registers.common[instr.rd] = i32::from_le_bytes(buf) as i64 as u64;
                     },
                     //LBU
                     0b100 => {
                         let mut buf = [0u8; 1];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = u8::from_le_bytes(buf) as u32;
+                        self.registers.common[instr.rd] = u8::from_le_bytes(buf) as u64;
                     },
                     //LHU
                     0b101 => {
                         let mut buf = [0u8; 2];
                         self.memory.read(addr, &mut buf);
     
-                        self.registers.common[instr.rd] = u16::from_le_bytes(buf) as u32;
+                        self.registers.common[instr.rd] = u16::from_le_bytes(buf) as u64;
                     },
+                    //LD
+                    0b011 => {
+                        let mut buf = [0u8; 8];
+                        self.memory.read(addr, &mut buf);
+
+                        self.registers.common[instr.rd] = u64::from_le_bytes(buf);
+
+                    }
+                    //LWU
+                    0b110 => {
+                        let mut buf = [0u8; 4];
+                        self.memory.read(addr, &mut buf);
+    
+                        self.registers.common[instr.rd] = u32::from_le_bytes(buf) as u64;
+                    }
                     _ => {unreachable!()}
                 }
             },
             //STORE
             0b010_0011 => {
                 let instr = SType::from(instr);
-                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32);
+                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64);
 
                 //println!("==>{:?}, addr:{:#x}", instr, addr);
                 match instr.funct3 {
@@ -203,7 +218,9 @@ impl CPU{
                     //SH
                     0b001 => { self.memory.write(addr, &(self.registers.common[instr.rs2] as u16).to_le_bytes()); },
                     //SW
-                    0b010 => { self.memory.write(addr, &self.registers.common[instr.rs2].to_le_bytes()); },
+                    0b010 => { self.memory.write(addr, &(self.registers.common[instr.rs2] as u32).to_le_bytes()); },
+                    //SD
+                    0b011 => { self.memory.write(addr, &self.registers.common[instr.rs2].to_le_bytes()); },
                     _ => { unreachable!(); }
                 }
             },
@@ -215,7 +232,7 @@ impl CPU{
                 match instr.funct3{
                     //ADDI
                     0b000 => { 
-                        self.registers.common[instr.rd] = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32); 
+                        self.registers.common[instr.rd] = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64); 
                     },
 
                     //SLTI
@@ -245,28 +262,28 @@ impl CPU{
                         }
                     },
                     //XORI
-                    0b100 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] ^ (instr.imm as u32); },
+                    0b100 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] ^ (instr.imm as u64); },
                     //ORI
-                    0b110 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] | (instr.imm as u32); },
+                    0b110 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] | (instr.imm as u64); },
                     //ANDI
-                    0b111 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] & (instr.imm as u32); },
+                    0b111 => { self.registers.common[instr.rd] = self.registers.common[instr.rs1] & (instr.imm as u64); },
                     
                     //These three instructions have a special encoding
                     //SLLI
                     0b001 => {
-                        let shamt = instr.imm & 0b1_1111;
+                        let shamt = instr.imm & 0b11_1111;
                         self.registers.common[instr.rd] = self.registers.common[instr.rs1] << shamt; 
                     }
                     0b101 => {
-                        let shamt = instr.imm & 0b1_1111;
+                        let shamt = instr.imm & 0b11_1111;
                         
                         //SRAI
                         if ((instr.imm >> 10) & 0b1) == 1{
-                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) >> shamt) as u32;
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i64) >> shamt) as u64;
                         }
                         //SRLI
                         else{
-                            self.registers.common[instr.rd] = self.registers.common[instr.rs1] >> (shamt as u32); 
+                            self.registers.common[instr.rd] = self.registers.common[instr.rs1] >> shamt; 
                         }
                     },
                     _ => { unreachable!() }
@@ -291,7 +308,7 @@ impl CPU{
                     //SLL
                     0b001 => {
                         self.registers.common[instr.rd] =
-                            self.registers.common[instr.rs1] << (self.registers.common[instr.rs2] & 0b1_1111);
+                            self.registers.common[instr.rs1] << (self.registers.common[instr.rs2] & 0b11_1111);
                     },
                     //SLT
                     0b010 => {
@@ -319,12 +336,12 @@ impl CPU{
                         //SRL
                         if instr.funct7 == 0{
                             self.registers.common[instr.rd] =
-                                self.registers.common[instr.rs1] >> (self.registers.common[instr.rs2] & 0b1_1111);
+                                self.registers.common[instr.rs1] >> (self.registers.common[instr.rs2] & 0b11_1111);
                         }
                         //SRA
                         else {
                             self.registers.common[instr.rd] =
-                                ((self.registers.common[instr.rs1] as i32) >> (self.registers.common[instr.rs2] & 0b1_1111)) as u32;
+                                ((self.registers.common[instr.rs1] as i64) >> (self.registers.common[instr.rs2] & 0b11_1111)) as u64;
                         }
                     }
                     //OR
@@ -345,6 +362,75 @@ impl CPU{
             //ECALL EBREAK
             0b111_0011 => { panic!("ECALL/EBREAK NYI, pc={:X?}", self.registers.pc); },
             
+            //RV64I specific instructions
+            0b001_1011 =>{
+                let instr = IType::from(instr);
+                println!("{:?}", instr);
+
+                match instr.funct3{
+                    //ADDIW
+                    0b000 => {
+                        self.registers.common[instr.rd] = (self.registers.common[instr.rs1] as i32).wrapping_add(instr.imm) as i64 as u64;
+                    },
+                    //SLIW
+                    0b001 => {
+                        let shamt = instr.imm & 0b11_1111;
+                        self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) << shamt) as i64 as u64; 
+                    }
+                    //SRLIW / SRAIW
+                    0b101 => {
+                        let shamt = instr.imm & 0b11_1111;
+
+                        //SRAIW
+                        if ((instr.imm >> 10) & 0b1) == 1{
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) >> shamt) as i64 as u64;
+                        }
+                        //SRLIW
+                        else{
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) >> shamt) as i64 as u64; 
+                        }
+                    },
+                    _ => {unreachable!()}
+                }
+            },
+            0b111_1011 =>{
+                let instr = RType::from(instr);
+                println!("{:?}", instr);
+
+                match instr.funct3{
+                    0b000 =>{
+                        //ADDW
+                        if instr.funct7 == 0{
+                            self.registers.common[instr.rd] =
+                                (self.registers.common[instr.rs1] as i32).wrapping_add(self.registers.common[instr.rs2] as i32) as i64 as u64;
+                        }
+                        //SUBW
+                        else{
+                            self.registers.common[instr.rd] =
+                                (self.registers.common[instr.rs1] as i32).wrapping_sub(self.registers.common[instr.rs2] as i32) as i64 as u64;
+                        }
+                    },
+                    //SLLW
+                    0b001 => {
+                        self.registers.common[instr.rd] =
+                            ((self.registers.common[instr.rs1] as i32) << (self.registers.common[instr.rs2] & 0b1_1111)) as i64 as u64;
+                    },
+                    0b101 => {
+                        //SRLW
+                        if instr.funct7 == 0{
+                            self.registers.common[instr.rd] =
+                                ((self.registers.common[instr.rs1] as i32) >> (self.registers.common[instr.rs2] & 0b1_1111) as i32) as u64;
+                        }
+                        //SRAW
+                        else{
+                            self.registers.common[instr.rd] =
+                                ((self.registers.common[instr.rs1] as i32) >> (self.registers.common[instr.rs2] & 0b1_1111)) as i64 as u64;
+                        }
+                    },
+                    _ => {unreachable!()}
+                }
+            }
+
             _ => unreachable!()
         }
 
@@ -353,8 +439,8 @@ impl CPU{
         }
     }
 
-    fn execute(&mut self, entrypoint: usize){
-        self.registers.pc = entrypoint as u32;
+    fn execute(&mut self, entrypoint: u64){
+        self.registers.pc = entrypoint;
 
         loop {
             let mut instr = [0 as u8; 4];
@@ -433,7 +519,7 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
 
     for s in elf.sections{
         if (s.shdr.flags.0 & elf::types::SHF_ALLOC.0) != 0 {
-            cpu.memory.allocate(s.shdr.addr as u32, s.shdr.size as usize, &s.data);
+            cpu.memory.allocate(s.shdr.addr, s.shdr.size, &s.data);
             println!("Section mapped:\n{:X?}", s.shdr);
         }
 
@@ -476,7 +562,7 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
                     //csrc extension
                     if let Some(entrypoint) = symbols.get("test_2"){
                         println!("Test_2 found at {:#8X}", entrypoint);
-                        cpu.execute(*entrypoint);
+                        cpu.execute(*entrypoint as u64);
                     }
                     else{
                         panic!("Couldnt find Test_2 in exported symbols");

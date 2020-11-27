@@ -5,8 +5,8 @@ pub const STACK_SIZE: usize = 0x10;
 #[derive(Debug)]
 struct MemoryRegion{
     data: Vec<u8>,
-    virt_addr: u32,
-    size: usize,
+    virt_addr: u64,
+    size: u64,
 }
 
 //Hold the memory
@@ -25,18 +25,18 @@ impl Memory{
         }
     }
     
-    pub fn read(&self, at: u32, buf: &mut [u8]) {
+    pub fn read(&self, at: u64, buf: &mut [u8]) {
         for m in &self.allocated{
-            if at >= m.virt_addr && at <= (m.virt_addr + m.size as u32){
+            if at >= m.virt_addr && at <= (m.virt_addr + m.size){
                 buf.copy_from_slice(&m.data[(at - m.virt_addr) as usize..(at - m.virt_addr) as usize + buf.len()]);
                 return
             }
         }
     }
 
-    pub fn write(&mut self, at: u32, buf: &[u8]){
+    pub fn write(&mut self, at: u64, buf: &[u8]){
         for m in &mut self.allocated{
-            if at >= m.virt_addr && at <= (m.virt_addr + m.size as u32){
+            if at >= m.virt_addr && at <= (m.virt_addr + m.size){
                 m.data[(at - m.virt_addr) as usize..(at - m.virt_addr) as usize + buf.len()].copy_from_slice(buf);
                 return;
             }
@@ -44,7 +44,7 @@ impl Memory{
         panic!("Try to get memory unmapped at: {:#8X}", at);
     }
 
-    pub fn allocate(&mut self, at: u32, size: usize, data: &[u8]){
+    pub fn allocate(&mut self, at: u64, size: u64, data: &[u8]){
         self.allocated.push(
             MemoryRegion{
                 data: data.to_vec(),
