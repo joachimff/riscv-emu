@@ -1,5 +1,6 @@
 pub mod memory;
 pub mod elf_reader;
+pub mod instr_type;
 
 extern crate elf;
 
@@ -9,136 +10,8 @@ use std::collections::HashMap;
 use std::fs;
 
 use memory::{Memory, MEMORY_SIZE};
+use instr_type::{*};
 
-#[derive(Debug)]
-pub struct RType{
-    funct7: u8,
-    rs2: usize,
-    rs1: usize,
-    funct3: u8,
-    rd: usize,
-    opcode: u8
-}
-
-impl From<u32> for RType{
-    fn from(instruction:u32) -> Self{
-        RType{
-            funct7: (instruction >> 25) as u8,
-            rs2:    ((instruction >> 20) & 0b11111) as usize,
-            rs1:    ((instruction >> 15) & 0b11111) as usize,
-            funct3: ((instruction >> 12) & 0b111) as u8,
-            rd:     ((instruction >> 7) & 0b11111) as usize,
-            opcode: (instruction & 0b111_1111) as u8
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct IType{
-    imm: i32,
-    rs1: usize,
-    funct3: u8,
-    rd: usize,
-    opcode: u8
-}
-
-impl From<u32> for IType {
-    fn from(instruction: u32) -> Self {
-        IType{
-            imm:    (instruction as i32) >> 20,
-            rs1:    ((instruction >> 15)  & 0b11111) as usize,
-            funct3: ((instruction >> 12)  & 0b111) as u8,
-            rd:     ((instruction >> 7)   & 0b11111) as usize,
-            opcode: (instruction          & 0b1111_111) as u8,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct UType{
-    imm: u32,
-    rd: usize,
-    opcode: u8
-}
-
-impl From<u32> for UType{
-    fn from(instruction:u32) -> Self{
-        UType{
-            imm: ((instruction >> 12) & 0b1111_1111_1111_1111_1111) as u32,
-            rd:     ((instruction >> 7) & 0b11111) as usize,
-            opcode: (instruction & 0b111_1111) as u8
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct JType{
-    imm: i32,
-    rd: usize,
-    opcode: u8
-}
-
-impl From<u32> for JType{
-    fn from(instruction:u32) -> Self{
-        JType{
-            imm: (((instruction >> 21) & 0b1_1111_1111) << 1 |
-                ((instruction >> 20) & 0b1) << 11 |
-                ((instruction >> 12) & 0b1111_1111) << 12) as i32 |
-                //Sign extended
-                (((instruction as i32) >> 30) << 20) as i32,
-            rd:     ((instruction >> 7) & 0b1_1111) as usize,
-            opcode: (instruction & 0b111_1111) as u8
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct BType{
-    imm: i32,
-    rs1: usize,
-    rs2: usize,
-    func3: u8,
-    opcode: u8
-}
-
-impl From<u32> for BType{
-    fn from(instruction:u32) -> Self{
-        BType{
-            imm: (((instruction >> 8) & 0b1111) << 1 |
-                ((instruction >> 25) & 0b11_1111) << 5 |
-                ((instruction >> 7) & 0b1) << 11) as i32 |
-                //Sign extended
-                (((instruction as i32) >> 31) << 12),
-            rs1: ((instruction >> 15) & 0b11111) as usize,
-            rs2: ((instruction >> 20) & 0b11111) as usize,
-            func3: ((instruction >> 12) & 0b111) as u8,
-            opcode: (instruction  & 0b111_1111) as u8,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct SType{
-    imm: i32,
-    rs1: usize,
-    rs2: usize,
-    funct3: u8,
-    opcode: u8
-}
-
-impl From<u32> for SType{
-    fn from(instruction:u32) -> Self{
-        SType{
-            imm: ((instruction >> 7) & 0b1_1111) as i32|
-                //Sign extended
-                (((instruction as i32) >> 25) << 5),
-            rs1: ((instruction >> 15) & 0b11111) as usize,
-            rs2: ((instruction >> 20) & 0b11111) as usize,
-            funct3: ((instruction >> 12) & 0b111) as u8,
-            opcode: (instruction  & 0b111_1111) as u8,
-        }
-    }
-}
 
 /// Memory management
 // Hold the registers 
