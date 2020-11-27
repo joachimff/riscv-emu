@@ -149,7 +149,7 @@ impl CPU{
             //LOAD 
             0b000_0011 => {
                 let instr = IType::from(instr);
-                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32) as usize;
+                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32);
 
                 println!("==>{:?}, addr:{:#X}", instr, addr);
                 match instr.funct3{
@@ -194,7 +194,7 @@ impl CPU{
             //STORE
             0b010_0011 => {
                 let instr = SType::from(instr);
-                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32) as usize;
+                let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u32);
 
                 //println!("==>{:?}, addr:{:#x}", instr, addr);
                 match instr.funct3 {
@@ -358,7 +358,7 @@ impl CPU{
 
         loop {
             let mut instr = [0 as u8; 4];
-            self.memory.read(self.registers.pc as usize, &mut instr);
+            self.memory.read(self.registers.pc, &mut instr);
 
             let instr = u32::from_le_bytes(instr);
 
@@ -434,7 +434,7 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
     for s in elf.sections{
         match s.shdr.name.as_ref() {
             ".text.init" => {
-                cpu.memory.allocate(&s.data);
+                cpu.memory.allocate(s.shdr.addr as u32, s.shdr.size as usize, &s.data);
             },
             ".symtab" => {
                 symtab = Some(s); 
@@ -445,7 +445,8 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
             _ => {},
         }
     }
-
+    println!("{:X?}", cpu.memory);
+    
     match symtab{
         Some(symtab) => {
             match strtab{
@@ -495,7 +496,7 @@ fn main(){
     for p in paths{
         println!("Executing test: {:?}({:})", p, i);
         start_elf(&p.unwrap().path());
-
+        
         i += 1;
     }
     println!("{:} tests passed", i);
