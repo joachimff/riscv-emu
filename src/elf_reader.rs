@@ -5,33 +5,32 @@ use std::str;
 #[derive(Debug)]
 pub struct Symbol{
     name: u32,
-    value: u32,
-    size: u32,
     info: u8,
     other: u8,
     shndx: u16,
+    value: u64,
+    size: u64,
 }
 
 impl Symbol{
-    fn read_symbol(data: &[u8]) -> Symbol{
-        Symbol{
+    fn read_symbol(data: &[u8]) -> Self{
+        Self{
             name: u32::from_le_bytes(data[0..4].try_into().unwrap()),
-            value: u32::from_le_bytes(data[4..8].try_into().unwrap()),
-            size: u32::from_le_bytes(data[8..12].try_into().unwrap()),
-            info: data[12],
-            other: data[13],
-            shndx: u16::from_le_bytes(data[14..16].try_into().unwrap()),
+            info: data[4],
+            other: data[5],
+            shndx: u16::from_le_bytes(data[6..8].try_into().unwrap()),
+            value: u64::from_le_bytes(data[8..16].try_into().unwrap()),
+            size: u64::from_le_bytes(data[16..24].try_into().unwrap()),
         }
     }
 }
 
-
 pub fn read_symbols_list(symtab: elf::Section, strtab: elf::Section) -> HashMap<String, usize>{
     let mut ret = HashMap::new();
 
-    for i in (0..symtab.data.len()).step_by(16){
+    for i in (0..symtab.data.len()).step_by(24){
         let s = Symbol::read_symbol(&symtab.data[i..]);
-
+    
         let name = str::from_utf8(&strtab.data[(s.name as usize)..]);
         if let Ok(name) = name{
             let name_end = name.find("\0");
@@ -44,7 +43,8 @@ pub fn read_symbols_list(symtab: elf::Section, strtab: elf::Section) -> HashMap<
         }
         else{
             println!("Error reading name for symbol: {:#?}", s);
-        }
+        } 
     }
+    println!("{:?}", ret);
     ret
 }
