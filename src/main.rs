@@ -61,7 +61,7 @@ impl CPU{
             0b011_0111 => {
                 let instr = UType::from(instr);
                 println!("{:X?}", instr);
-                self.registers.common[instr.rd] = (instr.imm << 12) as i64 as u64; 
+                self.registers.common[instr.rd] = (instr.imm << 12) as i32 as i64 as u64; 
             },
             //AUIPC
             0b001_0111 => {
@@ -369,13 +369,13 @@ impl CPU{
 
                 match instr.funct3{
                     //ADDIW
-                    0b000 => {
+                    0b000 => {  
                         self.registers.common[instr.rd] = (self.registers.common[instr.rs1] as i32).wrapping_add(instr.imm) as i64 as u64;
                     },
                     //SLIW
                     0b001 => {
                         let shamt = instr.imm & 0b11_1111;
-                        self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) << shamt) as i64 as u64; 
+                        self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i64) << shamt) as i64 as u64; 
                     }
                     //SRLIW / SRAIW
                     0b101 => {
@@ -383,11 +383,11 @@ impl CPU{
 
                         //SRAIW
                         if ((instr.imm >> 10) & 0b1) == 1{
-                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) >> shamt) as i64 as u64;
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i64) >> shamt) as i64 as u64;
                         }
                         //SRLIW
                         else{
-                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) >> shamt) as i64 as u64; 
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i64) >> shamt) as i64 as u64; 
                         }
                     },
                     _ => {unreachable!()}
