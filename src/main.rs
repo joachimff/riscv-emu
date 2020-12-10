@@ -68,7 +68,7 @@ impl CPU{
                 let instr = UType::from(instr);
                 println!("{:?}", instr);
 
-                let addr = (instr.imm << 12) as i64 as u64;
+                let addr = (instr.imm << 12) as i32 as i64 as u64;
                 self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
             },
             //JAL
@@ -372,10 +372,10 @@ impl CPU{
                     0b000 => {  
                         self.registers.common[instr.rd] = (self.registers.common[instr.rs1] as i32).wrapping_add(instr.imm) as i64 as u64;
                     },
-                    //SLIW
+                    //SLLIW
                     0b001 => {
                         let shamt = instr.imm & 0b11_1111;
-                        self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i64) << shamt) as i64 as u64; 
+                        self.registers.common[instr.rd] = (self.registers.common[instr.rs1] << shamt) as i32 as i64 as u64; 
                     }
                     //SRLIW / SRAIW
                     0b101 => {
@@ -383,17 +383,18 @@ impl CPU{
 
                         //SRAIW
                         if ((instr.imm >> 10) & 0b1) == 1{
-                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i64) >> shamt) as i64 as u64;
+                            println!("SRAAAAAAAAAAAAAAAAAAAAAAAAIW");
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) >> shamt) as i32 as u64;
                         }
                         //SRLIW
                         else{
-                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i64) >> shamt) as i64 as u64; 
+                            self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as u32) >> shamt) as i32 as u64; 
                         }
                     },
                     _ => {unreachable!()}
                 }
             },
-            0b111_1011 =>{
+            0b011_1011 =>{
                 let instr = RType::from(instr);
                 println!("{:?}", instr);
 
@@ -419,7 +420,7 @@ impl CPU{
                         //SRLW
                         if instr.funct7 == 0{
                             self.registers.common[instr.rd] =
-                                ((self.registers.common[instr.rs1] as i32) >> (self.registers.common[instr.rs2] & 0b1_1111) as i32) as u64;
+                                ((self.registers.common[instr.rs1] as u32) >> (self.registers.common[instr.rs2] & 0b1_1111)) as i32 as u64;
                         }
                         //SRAW
                         else{
@@ -431,7 +432,7 @@ impl CPU{
                 }
             }
 
-            _ => unreachable!()
+            _ => unreachable!("{:b}", opcode)
         }
 
         if should_incr_pc {
