@@ -11,7 +11,7 @@ struct MemoryRegion{
 
 //Hold the memory
 pub struct Memory {
-    data: [u8; STACK_SIZE],
+    //data: [u8; STACK_SIZE],
     allocated: Vec<MemoryRegion>,
 }
 
@@ -20,7 +20,7 @@ impl Memory{
     //Return a new memory with all null data
     pub fn new() -> Memory {
         Memory {
-            data: [0; STACK_SIZE],
+            //data: [0; STACK_SIZE],
             allocated: Vec::new()
         }
     }

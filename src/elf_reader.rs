@@ -25,7 +25,7 @@ impl Symbol{
     }
 }
 
-pub fn read_symbols_list(symtab: elf::Section, strtab: elf::Section) -> HashMap<String, usize>{
+pub fn read_symbols_list(symtab: elf::Section, strtab: elf::Section) -> HashMap<String, u64>{
     let mut ret = HashMap::new();
 
     for i in (0..symtab.data.len()).step_by(24){
@@ -35,7 +35,7 @@ pub fn read_symbols_list(symtab: elf::Section, strtab: elf::Section) -> HashMap<
         if let Ok(name) = name{
             let name_end = name.find("\0");
             if let Some(name_end) = name_end{
-                ret.insert(String::from(&name[0..name_end]), s.value as usize);
+                ret.insert(String::from(&name[0..name_end]), s.value);
             }
             else{
                 println!("Error reading end of name for symbol: {:#?}", s);

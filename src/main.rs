@@ -7,7 +7,9 @@ extern crate elf;
 use std::fmt;
 use std::path::PathBuf;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs;
+use std::time::{Instant};
 
 use memory::{Memory, STACK_SIZE};
 use instr_type::{*};
@@ -37,17 +39,25 @@ struct CPU{
     memory: Memory,
     registers: Registers,
     exit: bool, //Exit the execution
-    breakpoints: HashMap<usize, fn(&mut CPU)>,
+    breakpoints: HashMap<u64, fn(&mut CPU)>,
+
+    /// Everytime an instruction is executed its address is added to this set
+    /// this slow down the execution a lot as a set lookup is required at each
+    /// instruction execution
+    coverage_enabled: bool,
+    coverage: HashSet<u64>, 
 }
 
 impl CPU{
     //Return a new CPU with null memory
-    pub fn new() -> CPU {
+    pub fn new(coverage_enabled: bool) -> CPU {
         CPU{
             memory: Memory::new(),
             registers: Registers::new(),
             exit: false,
             breakpoints: HashMap::new(),
+            coverage_enabled: coverage_enabled,
+            coverage: HashSet::new(),
         }
     }
 
@@ -60,13 +70,11 @@ impl CPU{
             //LUI
             0b011_0111 => {
                 let instr = UType::from(instr);
-                println!("{:X?}", instr);
                 self.registers.common[instr.rd] = (instr.imm << 12) as i32 as i64 as u64; 
             },
             //AUIPC
             0b001_0111 => {
                 let instr = UType::from(instr);
-                println!("{:?}", instr);
 
                 let addr = (instr.imm << 12) as i32 as i64 as u64;
                 self.registers.common[instr.rd] = self.registers.pc.wrapping_add(addr);
@@ -74,7 +82,6 @@ impl CPU{
             //JAL
             0b110_1111 => {
                 let instr = JType::from(instr);
-                println!("JAL: {:?}", instr);
                 should_incr_pc = false;
 
                 //plain unconditionnal jump are encoded with rd=x0
@@ -151,7 +158,6 @@ impl CPU{
                 let instr = IType::from(instr);
                 let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64);
 
-                println!("==>{:?}, addr:{:#X}", instr, addr);
                 match instr.funct3{
                     //LB
                     0b000 => {
@@ -227,7 +233,7 @@ impl CPU{
             //Integer register-immediate instructions
             0b001_0011 => {
                 let instr = IType::from(instr);
-                println!("==>{:?}", instr);
+                //println!("==>{:?}", instr);
 
                 match instr.funct3{
                     //ADDI
@@ -365,7 +371,6 @@ impl CPU{
             //RV64I specific instructions
             0b001_1011 =>{
                 let instr = IType::from(instr);
-                println!("{:?}", instr);
 
                 match instr.funct3{
                     //ADDIW
@@ -383,7 +388,6 @@ impl CPU{
 
                         //SRAIW
                         if ((instr.imm >> 10) & 0b1) == 1{
-                            println!("SRAAAAAAAAAAAAAAAAAAAAAAAAIW");
                             self.registers.common[instr.rd] = ((self.registers.common[instr.rs1] as i32) >> shamt) as i32 as u64;
                         }
                         //SRLIW
@@ -396,7 +400,6 @@ impl CPU{
             },
             0b011_1011 =>{
                 let instr = RType::from(instr);
-                println!("{:?}", instr);
 
                 match instr.funct3{
                     0b000 =>{
@@ -438,10 +441,15 @@ impl CPU{
         if should_incr_pc {
             self.registers.pc = self.registers.pc.wrapping_add(4);
         }
+
+        if self.coverage_enabled{
+            self.coverage.insert(self.registers.pc);
+        }
     }
 
     fn execute(&mut self, entrypoint: u64){
         self.registers.pc = entrypoint;
+        let start_t = Instant::now();
 
         loop {
             let mut instr = [0 as u8; 4];
@@ -449,24 +457,29 @@ impl CPU{
 
             let instr = u32::from_le_bytes(instr);
 
-            println!("[PC:{:#8X}]=>{:#x}", self.registers.pc, instr);
+            //println!("[PC:{:#8X}]=>{:#x}", self.registers.pc, instr);
 
-            if let Some(b) = self.breakpoints.get(&(self.registers.pc as usize & 0xFFFF_FFFF)){
+            if let Some(b) = self.breakpoints.get(&(self.registers.pc)){
                 println!("<========>BREAKPOINT HIT<=========>");
                 b(self);
             }
 
             if self.exit{
+                if self.coverage_enabled{
+                    println!("CC: {:}", self.coverage.len());
+                }
+                
+                println!("Time elapsed (ms): {:}", start_t.elapsed().as_millis());
                 break;
             }
 
             self.exec_instruction(instr);
-            println!("{:?}", self);
-            //println!();
+            //println!("{:?}", self);
+
         }
     }
 
-    fn set_breakpoint(&mut self, at: usize, handler: fn(&mut CPU)){
+    fn set_breakpoint(&mut self, at: u64, handler: fn(&mut CPU)){
         self.breakpoints.insert(at, handler);
     }
 }
@@ -503,7 +516,7 @@ impl fmt::Debug for CPU{
 }
 
 fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>{
-    let mut cpu: CPU = CPU::new();
+    let mut cpu: CPU = CPU::new(true);
 
     //Read instructions
     //let path: PathBuf = From::from(path);
@@ -580,7 +593,7 @@ fn start_elf(path: &PathBuf) -> Result<(), Box<dyn std::error::Error + 'static>>
 
 fn main(){
     let paths = fs::read_dir("test/riscv-tests/").unwrap();
-    let mut i =0;
+    let mut i = 0;
     for p in paths{
         println!("Executing test: {:?}({:})", p, i);
         start_elf(&p.unwrap().path());
