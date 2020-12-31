@@ -2,7 +2,7 @@ use std::fmt;
 
 pub const STACK_SIZE: usize = 0x10;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct MemoryRegion{
     data: Vec<u8>,
     virt_addr: u64,
@@ -10,6 +10,7 @@ struct MemoryRegion{
 }
 
 //Hold the memory
+#[derive(Clone)]
 pub struct Memory {
     //data: [u8; STACK_SIZE],
     allocated: Vec<MemoryRegion>,

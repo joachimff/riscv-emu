@@ -10,7 +10,7 @@ use super::instr_type::{*};
 
 /// Memory management
 // Hold the registers 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Registers{
     pub common: [u64; 32],
     pub pc: u64,
@@ -39,6 +39,19 @@ pub struct CPU{
     /// instruction execution
     pub coverage_enabled: bool,
     pub coverage: HashSet<u64>, 
+
+    /// This is from this state that the delta for dirty pages will be calculed
+    /// at that time only one snapshot is supported, a call must be made to
+    /// save_as_initial_state before usage
+    pub nbr_exec: u64,
+    initial_state: Option<CpuSnapshot>,
+}
+
+/// This structure is used to store the state of memory and registers
+/// at a given time
+struct CpuSnapshot{
+    pub memory: Memory,
+    pub registers: Registers,
 }
 
 impl CPU{
@@ -51,6 +64,8 @@ impl CPU{
             breakpoints: HashMap::new(),
             coverage_enabled: coverage_enabled,
             coverage: HashSet::new(),
+            initial_state: None,
+            nbr_exec: 0,
         }
     }
 
@@ -440,20 +455,33 @@ impl CPU{
         }
     }
 
+    /// Store a copy of the current CPU state
+    pub fn save_as_initial_state(&mut self){
+        self.initial_state = Some(CpuSnapshot{
+            registers: self.registers.clone(),
+            memory: self.memory.clone(),
+        });
+    }
+
+    /// Reset to the state snapshot saved thourgh save_as_initial_state
+    /// here only dirty pages are reseted
+    pub fn reset_to_initial_state(&mut self){
+        let initial_state = self.initial_state.as_ref()
+            .expect("Trying to reset but no initial state has been saved");
+
+        self.memory = initial_state.memory.clone();
+        self.registers = initial_state.registers.clone();
+
+        self.nbr_exec = self.nbr_exec.wrapping_add(1);
+    }
+
     pub fn execute(&mut self, entrypoint: u64){
         self.registers.pc = entrypoint;
         let start_t = Instant::now();
 
         loop {
-            let mut instr = [0 as u8; 4];
-            self.memory.read(self.registers.pc, &mut instr);
-
-            let instr = u32::from_le_bytes(instr);
-
-            //println!("[PC:{:#8X}]=>{:#x}", self.registers.pc, instr);
-
             if let Some(b) = self.breakpoints.get(&(self.registers.pc)){
-                println!("<========>BREAKPOINT HIT<=========>");
+                //println!("<========>BREAKPOINT HIT:{:X}<=========>", self.registers.pc);
                 b(self);
             }
 
@@ -466,9 +494,13 @@ impl CPU{
                 break;
             }
 
+            let mut instr = [0 as u8; 4];
+            self.memory.read(self.registers.pc, &mut instr);
+
+            let instr = u32::from_le_bytes(instr);
+
             self.exec_instruction(instr);
             //println!("{:?}", self);
-
         }
     }
 
