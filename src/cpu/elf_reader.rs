@@ -45,6 +45,5 @@ pub fn read_symbols_list(symtab: elf::Section, strtab: elf::Section) -> HashMap<
             println!("Error reading name for symbol: {:#?}", s);
         } 
     }
-    println!("{:?}", ret);
     ret
 }
