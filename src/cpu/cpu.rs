@@ -70,8 +70,11 @@ impl CPU{
 
     //Execute one instruction
     fn exec_instruction(&mut self, instr: u32){
+        //The hash of the origin and the destination of a branch is recorded for code coverage calculation
+        let mut branch_dest = 0;
+
         let opcode = instr & 0b111_1111;
-        let mut should_incr_pc = true;
+        let mut take_branch = false;
 
         match opcode{
             //LUI
@@ -89,25 +92,24 @@ impl CPU{
             //JAL
             0b110_1111 => {
                 let instr = JType::from(instr);
-                should_incr_pc = false;
+                take_branch = true;
 
                 //plain unconditionnal jump are encoded with rd=x0
                 if instr.rd != 0{
                     self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
                 }
-                self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
+                branch_dest = self.registers.pc.wrapping_add(instr.imm as u64);
             },
             //JALR
             0b110_0111 => {
                 let instr = IType::from(instr);
-                should_incr_pc = false;
+                take_branch = true;
 
-                let target = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64);
+                branch_dest = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64);
                 
                 if instr.rd != 0{
                     self.registers.common[instr.rd] = self.registers.pc.wrapping_add(4);
                 }
-                self.registers.pc = target;
             },
             //Conditional Branches
             0b110_0011 => {
@@ -118,47 +120,48 @@ impl CPU{
                     //BEQ
                     0b000 => {
                         if self.registers.common[instr.rs1] == self.registers.common[instr.rs2]{
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
-                            should_incr_pc = false;
+                            branch_dest = self.registers.pc.wrapping_add(instr.imm as u64);
+                            take_branch = true;
                         }
                     },
                     //BNE
                     0b001 => {
                         if self.registers.common[instr.rs1] != self.registers.common[instr.rs2]{
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
-                            should_incr_pc = false;
+                            branch_dest = self.registers.pc.wrapping_add(instr.imm as u64);
+                            take_branch = true;
                         }
                     },
                     //BLT
                     0b100 => {
                         if (self.registers.common[instr.rs1] as i32) < (self.registers.common[instr.rs2] as i32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
-                            should_incr_pc = false;
+                            branch_dest = self.registers.pc.wrapping_add(instr.imm as u64);
+                            take_branch = true;
                         }
                     },
                     //BGE
                     0b101 => {
                         if (self.registers.common[instr.rs1] as i32) >= (self.registers.common[instr.rs2] as i32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
-                            should_incr_pc = false;
+                            branch_dest = self.registers.pc.wrapping_add(instr.imm as u64);
+                            take_branch = true;
                         }
                     }
                     //BLTU
                     0b110 => {
                         if (self.registers.common[instr.rs1] as u32) < (self.registers.common[instr.rs2] as u32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
-                            should_incr_pc = false;
+                            branch_dest = self.registers.pc.wrapping_add(instr.imm as u64);
+                            take_branch = true;
                         }
                     }
                     //BGEU
                     0b111 => {
                         if (self.registers.common[instr.rs1] as u32) >= (self.registers.common[instr.rs2] as u32){
-                            self.registers.pc = self.registers.pc.wrapping_add(instr.imm as u64);
-                            should_incr_pc = false;
+                            branch_dest = self.registers.pc.wrapping_add(instr.imm as u64);
+                            take_branch = true;
                         }
                     },
                     _ => {unreachable!()},
                 }
+
             },
             //LOAD 
             0b000_0011 => {
@@ -445,12 +448,17 @@ impl CPU{
             _ => unreachable!("{:b}", opcode)
         }
 
-        if should_incr_pc {
-            self.registers.pc = self.registers.pc.wrapping_add(4);
+        //We branched
+        if take_branch{
+            if branch_dest == 0{
+                panic!("Branching to a non set destination");
+            }
+            //Record the hash of the origin and the destination
+            self.coverage.insert(self.registers.pc ^ branch_dest);
+            self.registers.pc = branch_dest;
         }
-
-        if self.coverage_enabled{
-            self.coverage.insert(self.registers.pc);
+        else {
+            self.registers.pc = self.registers.pc.wrapping_add(4);
         }
     }
 
