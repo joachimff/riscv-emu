@@ -102,7 +102,7 @@ fn bp_save_state(cpu: &mut CPU){
 
 fn reset_to_snapshot(cpu: &mut CPU){
     cpu.reset_to_initial_state();
-    if (cpu.nbr_exec != 0) && ((cpu.nbr_exec % 1000) == 0){
+    if (cpu.nbr_exec != 0) && ((cpu.nbr_exec % 10) == 0){
         println!("State reset: {:}", cpu.nbr_exec);
         cpu.exit = true;
     }
@@ -122,11 +122,12 @@ fn exec_elf(path: &PathBuf) {
     let mut symtab: Option<elf::Section> = None;
     let mut strtab: Option<elf::Section> = None;
     
-    println!("Mapping memory:");
+    println!("Mapping memory sections:");
     for s in elf.sections{
         if (s.shdr.flags.0 & elf::types::SHF_ALLOC.0) != 0 {
             cpu.memory.allocate(s.shdr.addr, s.shdr.size, &s.data);
-            println!("  * {:}", s.shdr.name);
+            println!("  * {:}({}b): {:08X} -> {:08X}", 
+                s.shdr.name, s.shdr.size, s.shdr.addr, s.shdr.addr + s.shdr.size);
         }
 
         match s.shdr.name.as_ref() {

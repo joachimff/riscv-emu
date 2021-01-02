@@ -44,13 +44,12 @@ pub struct CPU{
     /// at that time only one snapshot is supported, a call must be made to
     /// save_as_initial_state before usage
     pub nbr_exec: u64,
-    initial_state: Option<CpuSnapshot>,
+    saved_state: Option<CpuSnapshot>,
 }
 
 /// This structure is used to store the state of memory and registers
 /// at a given time
 struct CpuSnapshot{
-    pub memory: Memory,
     pub registers: Registers,
 }
 
@@ -64,7 +63,7 @@ impl CPU{
             breakpoints: HashMap::new(),
             coverage_enabled: coverage_enabled,
             coverage: HashSet::new(),
-            initial_state: None,
+            saved_state: None,
             nbr_exec: 0,
         }
     }
@@ -457,20 +456,20 @@ impl CPU{
 
     /// Store a copy of the current CPU state
     pub fn save_as_initial_state(&mut self){
-        self.initial_state = Some(CpuSnapshot{
+        self.saved_state = Some(CpuSnapshot{
             registers: self.registers.clone(),
-            memory: self.memory.clone(),
         });
+        self.memory.save_state();
     }
 
     /// Reset to the state snapshot saved thourgh save_as_initial_state
     /// here only dirty pages are reseted
     pub fn reset_to_initial_state(&mut self){
-        let initial_state = self.initial_state.as_ref()
+        let initial_state = self.saved_state.as_ref()
             .expect("Trying to reset but no initial state has been saved");
 
-        self.memory = initial_state.memory.clone();
         self.registers = initial_state.registers.clone();
+        self.memory.reset_to_saved_state();
 
         self.nbr_exec = self.nbr_exec.wrapping_add(1);
     }
