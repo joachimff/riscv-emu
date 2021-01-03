@@ -1,6 +1,6 @@
 use std::fmt;
 
-pub const STACK_SIZE: usize = 0x10;
+pub const STACK_SIZE: usize = 0x1000;
 
 // No idea of what would be a good value 
 pub const BITMAP_SIZE: u64 = 0x10;
@@ -17,7 +17,7 @@ struct MemoryRegion{
 //Hold the memory
 #[derive(Clone)]
 pub struct Memory {
-    //data: [u8; STACK_SIZE],
+    stack: [u8; STACK_SIZE],
     allocated: Vec<MemoryRegion>,
 
     saved_state: Option<Vec<MemoryRegion>>,
@@ -28,15 +28,20 @@ impl Memory{
     //Return a new memory with all null data
     pub fn new() -> Memory {
         Memory {
-            //data: [0; STACK_SIZE],
+            stack: [0; STACK_SIZE],
             allocated: Vec::new(),
             saved_state: None,
         }
     }
     
     pub fn read(&self, at: u64, buf: &mut [u8]) {
+        if at < STACK_SIZE as u64{
+            buf.copy_from_slice(&self.stack[at as usize .. at as usize + buf.len()]);
+            return
+        }
+
         for m in &self.allocated{
-            if at >= m.virt_addr && at <= (m.virt_addr + m.size){
+            if at >= m.virt_addr && at < (m.virt_addr + m.size){
                 buf.copy_from_slice(&m.data[(at - m.virt_addr) as usize..(at - m.virt_addr) as usize + buf.len()]);
                 return
             }
@@ -44,12 +49,25 @@ impl Memory{
     }
 
     pub fn write(&mut self, at: u64, buf: &[u8]){
+        if at < STACK_SIZE as u64{
+            self.stack[at as usize.. at as usize + buf.len()].copy_from_slice(buf);
+            return
+        }
+
         for m in &mut self.allocated{
-            if at >= m.virt_addr && at <= (m.virt_addr + m.size){
-                m.data[(at - m.virt_addr) as usize..(at - m.virt_addr) as usize + buf.len()].copy_from_slice(buf);
+            if at >= m.virt_addr && at < (m.virt_addr + m.size){
+                /*println!("at:{:08X} virt_addr:{:08X} end_section{:08X}, section_buff_size:{:08X} buf len {:08X}",
+                    at,
+                    m.virt_addr,
+                    (at - m.virt_addr) as usize + buf.len(),
+                    m.data.len(),
+                    buf.len()
+                );*/
+                let relative_addr = (at - m.virt_addr) as usize;
+                m.data[relative_addr..relative_addr + buf.len()].copy_from_slice(buf);
                 
                 //Set first byte to 1 when data has been changed
-                m.dirty_bitmap[(at % BITMAP_SIZE) as usize] = 0x1;
+                m.dirty_bitmap[relative_addr / BITMAP_SIZE as usize] = 0x1;
 
                 return;
             }

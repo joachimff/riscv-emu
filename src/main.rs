@@ -102,10 +102,10 @@ fn bp_save_state(cpu: &mut CPU){
 
 fn reset_to_snapshot(cpu: &mut CPU){
     cpu.reset_to_initial_state();
-    if (cpu.nbr_exec != 0) && ((cpu.nbr_exec % 10) == 0){
-        println!("State reset: {:}", cpu.nbr_exec);
+    //if (cpu.nbr_exec != 0) && ((cpu.nbr_exec % 10) == 0){
+    //    println!("State reset: {:}", cpu.nbr_exec);
         cpu.exit = true;
-    }
+    //}
 }
 
 fn exec_elf(path: &PathBuf) {
@@ -148,47 +148,30 @@ fn exec_elf(path: &PathBuf) {
 
     //Test3 is the state from where we want to restart the execution,
     //set a breakpoint on it and save a snapshot
-    if let Some(addr) = symbols.get("test_3"){
-        println!("Breakpoint set at test_3 ({:#8X})", addr);
+    if let Some(addr) = symbols.get("main"){
+        println!("Breakpoint set at main ({:#8X})", addr);
         cpu.set_breakpoint(*addr, bp_save_state);
     }
     else{
-        panic!("Couldnt find Test3 in exported symbols");
+        panic!("Couldnt find main in exported symbols");
     }
 
     //The success symbol represents the end of the execution, from
     //there we want to reset to the initial state reached at Test3
-    if let Some(addr) = symbols.get("pass"){
-        println!("Breakpoint set at pass ({:#8X})", addr);
+    if let Some(addr) = symbols.get("exit"){
+        println!("Breakpoint set at exit ({:#8X})", addr);
         cpu.set_breakpoint(*addr, reset_to_snapshot);
     }
     else{
         panic!("Couldnt find pass in exported symbols");
     }
-    
-    //Set a breakpoint on the failure function of the test
-    if let Some(addr) = symbols.get("fail"){
-        println!("Breakpoint set at fail ({:#8X})", addr);
-        cpu.set_breakpoint(*addr, bp_test_error);
-    }
-    else{
-        panic!("Couldnt find fail in exported symbols");
-    }
 
-    //We start from the first test in order to skip the init part which requires 
-    //csrc extension
-    if let Some(entrypoint) = symbols.get("test_2"){
-        println!("Starting from Test_2 at {:#8X}", entrypoint);
-        cpu.execute(*entrypoint);
-    }
-    else{
-        panic!("Couldnt find Test_2 in exported symbols");
-    }
+    cpu.execute(entrypoint);
 }
 
 
 fn main(){
-    let f = PathBuf::from("test/riscv-tests/rv64ui-p-addiw");
+    let f = PathBuf::from("test/real/main");
     exec_elf(&f);
     
 }

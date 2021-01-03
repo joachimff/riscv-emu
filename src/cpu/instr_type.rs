@@ -69,11 +69,11 @@ pub struct JType{
 impl From<u32> for JType{
     fn from(instruction:u32) -> Self{
         JType{
-            imm: (((instruction >> 21) & 0b1_1111_1111) << 1 |
+            imm: (((instruction >> 21) & 0b11_1111_1111) << 1 |
                 ((instruction >> 20) & 0b1) << 11 |
                 ((instruction >> 12) & 0b1111_1111) << 12) as i32 |
                 //Sign extended
-                (((instruction as i32) >> 30) << 20) as i32,
+                (((instruction as i32) >> 31) << 20) as i32,
             rd:     ((instruction >> 7) & 0b1_1111) as usize,
             opcode: (instruction & 0b111_1111) as u8
         }

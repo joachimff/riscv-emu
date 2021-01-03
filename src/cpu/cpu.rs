@@ -4,6 +4,7 @@ use std::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Instant;
+use std::str;
 
 use super::memory::{Memory, STACK_SIZE};
 use super::instr_type::{*};
@@ -54,7 +55,7 @@ struct CpuSnapshot{
 }
 
 impl CPU{
-    //Return a new CPU with null memory
+    //Return a new CPU
     pub fn new(coverage_enabled: bool) -> CPU {
         CPU{
             memory: Memory::new(),
@@ -167,7 +168,7 @@ impl CPU{
             0b000_0011 => {
                 let instr = IType::from(instr);
                 let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64);
-
+                //println!("{:X?} => addr:{:X?}", instr, addr);
                 match instr.funct3{
                     //LB
                     0b000 => {
@@ -227,7 +228,7 @@ impl CPU{
                 let instr = SType::from(instr);
                 let addr = self.registers.common[instr.rs1].wrapping_add(instr.imm as u64);
 
-                //println!("==>{:?}, addr:{:#x}", instr, addr);
+                //println!("==>{:?}, addr:{:#x}, base{:#X}", instr, addr, self.registers.common[instr.rs1]);
                 match instr.funct3 {
                     //SB
                     0b000 => { self.memory.write(addr, &(self.registers.common[instr.rs2] as u8).to_le_bytes()); },
@@ -376,7 +377,50 @@ impl CPU{
             //FENCE
             0b000_1111 => { panic!("FENCE NYI"); },
             //ECALL EBREAK
-            0b111_0011 => { panic!("ECALL/EBREAK NYI, pc={:X?}", self.registers.pc); },
+            0b111_0011 => { 
+                let syscall_nbr = self.registers.common[17]; //a7
+                println!("Syscall: {:X}, {:X}, {:X}, {:X}", 
+                    self.registers.common[10], self.registers.common[11],
+                    self.registers.common[12], self.registers.common[13]);
+
+                match(syscall_nbr){
+                    // Read
+                    63 => {
+                        println!("Read");
+                        let fp = self.registers.common[10];
+                        let ptr = self.registers.common[11];
+                        let len = self.registers.common[12];
+
+                        let buf = "AZERTY\n".as_bytes();
+                        self.memory.write(ptr, buf);
+
+                        self.registers.common[10] = buf.len() as u64;
+                    },
+                    // Write
+                    64 => {
+                        println!("Write");
+                        let fp = self.registers.common[10];
+                        let ptr = self.registers.common[11];
+                        let len = self.registers.common[12];
+
+                        let mut buf = vec![0 as u8; len as usize];
+                        self.memory.read(ptr, &mut buf);
+                        println!("Write:[{}]{:?}", fp, str::from_utf8(&buf));
+                    },
+                    // Fstat
+                    80 => {
+                        println!("Fstate");
+                    }
+                    // Brk
+                    214 => {
+                        println!("Brk");
+                    }
+                    _ => {
+                        println!("Unknown syscall: {:?}", syscall_nbr);
+                    }
+                }
+                println!();
+            },
             
             //RV64I specific instructions
             0b001_1011 =>{
@@ -506,6 +550,7 @@ impl CPU{
 
             let instr = u32::from_le_bytes(instr);
 
+            //println!("{:08X}", self.registers.pc);
             self.exec_instruction(instr);
             //println!("{:?}", self);
         }
