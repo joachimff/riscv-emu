@@ -4,10 +4,12 @@ use std::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Instant;
-use std::str;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use super::memory::{Memory, STACK_SIZE};
 use super::instr_type::{*};
+use super::fuzzer::{Fuzzer};
 
 /// Memory management
 // Hold the registers 
@@ -34,6 +36,7 @@ pub struct CPU{
     pub registers: Registers,
     pub exit: bool, //Exit the execution
     pub breakpoints: HashMap<u64, fn(&mut CPU)>,
+    pub redirect_stdout: bool,
 
     /// Everytime an instruction is executed its address is added to this set
     /// this slow down the execution a lot as a set lookup is required at each
@@ -52,6 +55,7 @@ pub struct CPU{
 /// at a given time
 struct CpuSnapshot{
     pub registers: Registers,
+    pub coverage: Option<HashSet<u64>>,
 }
 
 impl CPU{
@@ -62,6 +66,7 @@ impl CPU{
             registers: Registers::new(),
             exit: false,
             breakpoints: HashMap::new(),
+            redirect_stdout: true,
             coverage_enabled: coverage_enabled,
             coverage: HashSet::new(),
             saved_state: None,
@@ -70,7 +75,7 @@ impl CPU{
     }
 
     //Execute one instruction
-    fn exec_instruction(&mut self, instr: u32){
+    fn exec_instruction(&mut self, instr: u32, fuzzer: Rc<RefCell<Fuzzer>>){
         //The hash of the origin and the destination of a branch is recorded for code coverage calculation
         let mut branch_dest = 0;
 
@@ -378,48 +383,7 @@ impl CPU{
             0b000_1111 => { panic!("FENCE NYI"); },
             //ECALL EBREAK
             0b111_0011 => { 
-                let syscall_nbr = self.registers.common[17]; //a7
-                println!("Syscall: {:X}, {:X}, {:X}, {:X}", 
-                    self.registers.common[10], self.registers.common[11],
-                    self.registers.common[12], self.registers.common[13]);
-
-                match(syscall_nbr){
-                    // Read
-                    63 => {
-                        println!("Read");
-                        let fp = self.registers.common[10];
-                        let ptr = self.registers.common[11];
-                        let len = self.registers.common[12];
-
-                        let buf = "AZERTY\n".as_bytes();
-                        self.memory.write(ptr, buf);
-
-                        self.registers.common[10] = buf.len() as u64;
-                    },
-                    // Write
-                    64 => {
-                        println!("Write");
-                        let fp = self.registers.common[10];
-                        let ptr = self.registers.common[11];
-                        let len = self.registers.common[12];
-
-                        let mut buf = vec![0 as u8; len as usize];
-                        self.memory.read(ptr, &mut buf);
-                        println!("Write:[{}]{:?}", fp, str::from_utf8(&buf));
-                    },
-                    // Fstat
-                    80 => {
-                        println!("Fstate");
-                    }
-                    // Brk
-                    214 => {
-                        println!("Brk");
-                    }
-                    _ => {
-                        println!("Unknown syscall: {:?}", syscall_nbr);
-                    }
-                }
-                println!();
+                fuzzer.borrow_mut().syscall(self);
             },
             
             //RV64I specific instructions
@@ -497,7 +461,7 @@ impl CPU{
             if branch_dest == 0{
                 panic!("Branching to a non set destination");
             }
-            //Record the hash of the origin and the destination
+            //Record the xor of the origin and the destination
             self.coverage.insert(self.registers.pc ^ branch_dest);
             self.registers.pc = branch_dest;
         }
@@ -510,13 +474,17 @@ impl CPU{
     pub fn save_as_initial_state(&mut self){
         self.saved_state = Some(CpuSnapshot{
             registers: self.registers.clone(),
+            coverage:{
+                if self.coverage_enabled{ Some(self.coverage.clone()) }
+                else{ None }
+            }
         });
         self.memory.save_state();
     }
 
     /// Reset to the state snapshot saved thourgh save_as_initial_state
-    /// here only dirty pages are reseted
-    pub fn reset_to_initial_state(&mut self){
+    /// here only dirty pages are reseted, returns the coverage of the last run 
+    pub fn reset_to_initial_state(&mut self) -> HashSet<u64>{
         let initial_state = self.saved_state.as_ref()
             .expect("Trying to reset but no initial state has been saved");
 
@@ -524,9 +492,11 @@ impl CPU{
         self.memory.reset_to_saved_state();
 
         self.nbr_exec = self.nbr_exec.wrapping_add(1);
+
+        self.coverage.clone()
     }
 
-    pub fn execute(&mut self, entrypoint: u64){
+    pub fn execute(&mut self, entrypoint: u64, fuzzer: Rc<RefCell<Fuzzer>>){
         self.registers.pc = entrypoint;
         let start_t = Instant::now();
 
@@ -551,7 +521,7 @@ impl CPU{
             let instr = u32::from_le_bytes(instr);
 
             //println!("{:08X}", self.registers.pc);
-            self.exec_instruction(instr);
+            self.exec_instruction(instr, Rc::clone(&fuzzer));
             //println!("{:?}", self);
         }
     }
